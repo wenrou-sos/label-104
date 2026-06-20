@@ -10,6 +10,7 @@ def create_app():
     from routes.employee_routes import employee_bp
     from routes.member_routes import member_bp
     from routes.channel_routes import channel_bp
+    from routes.channel_cost_routes import channel_cost_bp
     from routes.export_routes import export_bp
     from routes.warning_routes import warning_bp
     
@@ -18,6 +19,7 @@ def create_app():
     app.register_blueprint(employee_bp, url_prefix='/api/v1/employees')
     app.register_blueprint(member_bp, url_prefix='/api/v1/members')
     app.register_blueprint(channel_bp, url_prefix='/api/v1/channels')
+    app.register_blueprint(channel_cost_bp, url_prefix='/api/v1/channel-costs')
     app.register_blueprint(export_bp, url_prefix='/api/v1/export')
     app.register_blueprint(warning_bp, url_prefix='/api/v1/warnings')
     

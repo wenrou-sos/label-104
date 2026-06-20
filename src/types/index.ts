@@ -187,12 +187,33 @@ export interface ChannelAov {
 export interface ChannelEvaluation {
   channelId: string
   channelName: string
-  conversionScore: number
+  channelType: string
+  exposureCount: number
+  clickCount: number
+  arrivalCount: number
+  clickRate: number
+  conversionRate: number
+  avgPrice: number
+  totalRevenue: number
+  totalCost: number
+  profit: number
+  roi: number | null
+  roiLevel: string
   revenueScore: number
-  costScore: number
+  convScore: number
+  aovScore: number
+  roiScore: number
   totalScore: number
   suggestion: string
 }
+
+export interface ChannelCost {
+  channelId: string
+  statMonth: string
+  cost: number
+}
+
+export type ChannelCostMap = Record<string, Record<string, number>>
 
 export interface FilterOptions {
   startDate: string

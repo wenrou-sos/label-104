@@ -139,13 +139,22 @@ const channelAovs: ChannelAov[] = [
 ]
 
 const channelEvaluations: ChannelEvaluation[] = [
-  { channelId: 'C001', channelName: '美团', conversionScore: 75, revenueScore: 70, costScore: 60, totalScore: 68, suggestion: '稳定投放，可尝试拓展新客套餐' },
-  { channelId: 'C002', channelName: '抖音', conversionScore: 65, revenueScore: 55, costScore: 50, totalScore: 57, suggestion: '转化率偏低，建议优化落地页和团购套餐' },
-  { channelId: 'C003', channelName: '小红书', conversionScore: 70, revenueScore: 80, costScore: 70, totalScore: 73, suggestion: '客单价高，加大达人合作投放' },
-  { channelId: 'C004', channelName: '老客推荐', conversionScore: 90, revenueScore: 95, costScore: 95, totalScore: 93, suggestion: '最优渠道，建议加强老带新激励政策' },
-  { channelId: 'C005', channelName: '微信公众号', conversionScore: 60, revenueScore: 55, costScore: 75, totalScore: 63, suggestion: '可增加内容营销，提升粉丝活跃度' },
-  { channelId: 'C006', channelName: '线下活动', conversionScore: 80, revenueScore: 75, costScore: 55, totalScore: 70, suggestion: '效果不错，可定期举办主题活动' },
+  { channelId: 'C001', channelName: '美团', channelType: '本地生活', exposureCount: 120000, clickCount: 12000, arrivalCount: 480, clickRate: 0.1, conversionRate: 0.004, avgPrice: 420, totalRevenue: 201600, totalCost: 80000, profit: 121600, roi: 152, roiLevel: 'good', revenueScore: 60, convScore: 70, aovScore: 50, roiScore: 65, totalScore: 72, suggestion: 'ROI良好，建议优化素材提升转化率' },
+  { channelId: 'C002', channelName: '抖音', channelType: '短视频', exposureCount: 200000, clickCount: 18000, arrivalCount: 520, clickRate: 0.09, conversionRate: 0.0026, avgPrice: 380, totalRevenue: 197600, totalCost: 120000, profit: 77600, roi: 64.7, roiLevel: 'medium', revenueScore: 58, convScore: 55, aovScore: 45, roiScore: 40, totalScore: 56, suggestion: 'ROI一般，建议缩窄投放人群，降低获客成本' },
+  { channelId: 'C003', channelName: '小红书', channelType: '社交种草', exposureCount: 80000, clickCount: 10000, arrivalCount: 420, clickRate: 0.125, conversionRate: 0.00525, avgPrice: 520, totalRevenue: 218400, totalCost: 60000, profit: 158400, roi: 264, roiLevel: 'excellent', revenueScore: 65, convScore: 85, aovScore: 65, roiScore: 90, totalScore: 82, suggestion: 'ROI极高，建议加大投放预算，抢占更多流量' },
+  { channelId: 'C004', channelName: '老客推荐', channelType: '口碑传播', exposureCount: 10000, clickCount: 3000, arrivalCount: 380, clickRate: 0.3, conversionRate: 0.038, avgPrice: 680, totalRevenue: 258400, totalCost: 20000, profit: 238400, roi: 1192, roiLevel: 'excellent', revenueScore: 78, convScore: 95, aovScore: 85, roiScore: 100, totalScore: 94, suggestion: '最优渠道，建议加强老带新激励政策' },
+  { channelId: 'C005', channelName: '微信朋友圈', channelType: '社交媒体', exposureCount: 60000, clickCount: 6000, arrivalCount: 240, clickRate: 0.1, conversionRate: 0.004, avgPrice: 450, totalRevenue: 108000, totalCost: 50000, profit: 58000, roi: 116, roiLevel: 'good', revenueScore: 32, convScore: 60, aovScore: 56, roiScore: 55, totalScore: 58, suggestion: 'ROI良好但体量小，可尝试扩量投放' },
+  { channelId: 'C006', channelName: '大众点评', channelType: '本地生活', exposureCount: 90000, clickCount: 9000, arrivalCount: 400, clickRate: 0.1, conversionRate: 0.0044, avgPrice: 480, totalRevenue: 192000, totalCost: 70000, profit: 122000, roi: 174.3, roiLevel: 'good', revenueScore: 57, convScore: 75, aovScore: 60, roiScore: 70, totalScore: 72, suggestion: 'ROI良好，建议维持当前投放节奏' },
 ]
+
+const channelCosts: Record<string, Record<string, number>> = {
+  C001: { '2024-01': 8000, '2024-02': 8500, '2024-03': 9000, '2024-04': 10000, '2024-05': 11000, '2024-06': 9500, '2024-07': 8000, '2024-08': 7500, '2024-09': 8000, '2024-10': 9000, '2024-11': 10000, '2024-12': 12000 },
+  C002: { '2024-01': 12000, '2024-02': 15000, '2024-03': 18000, '2024-04': 20000, '2024-05': 22000, '2024-06': 18000, '2024-07': 15000, '2024-08': 14000, '2024-09': 16000, '2024-10': 18000, '2024-11': 20000, '2024-12': 25000 },
+  C003: { '2024-01': 5000, '2024-02': 5500, '2024-03': 6000, '2024-04': 7000, '2024-05': 8000, '2024-06': 7500, '2024-07': 6000, '2024-08': 5500, '2024-09': 6000, '2024-10': 7000, '2024-11': 8000, '2024-12': 10000 },
+  C004: { '2024-01': 2000, '2024-02': 2000, '2024-03': 2500, '2024-04': 2500, '2024-05': 3000, '2024-06': 2500, '2024-07': 2000, '2024-08': 2000, '2024-09': 2500, '2024-10': 2500, '2024-11': 3000, '2024-12': 3500 },
+  C005: { '2024-01': 6000, '2024-02': 6500, '2024-03': 7000, '2024-04': 7500, '2024-05': 8000, '2024-06': 7000, '2024-07': 6000, '2024-08': 5500, '2024-09': 6000, '2024-10': 7000, '2024-11': 8000, '2024-12': 10000 },
+  C006: { '2024-01': 7000, '2024-02': 7500, '2024-03': 8000, '2024-04': 8500, '2024-05': 9000, '2024-06': 8000, '2024-07': 7000, '2024-08': 6500, '2024-09': 7000, '2024-10': 8000, '2024-11': 9000, '2024-12': 11000 },
+}
 
 export const mockData = {
   stores,
@@ -161,6 +170,7 @@ export const mockData = {
   channelConversions,
   channelAovs,
   channelEvaluations,
+  channelCosts,
 }
 
 export default mockData

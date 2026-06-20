@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from utils.csv_loader import CsvLoader
+from services.channel_cost_service import ChannelCostService
 
 
 class ChannelService:
@@ -83,7 +84,7 @@ class ChannelService:
         return result.to_dict('records')
     
     @staticmethod
-    def get_evaluation(start_date=None, end_date=None, store_ids=None, sort_by='score', sort_order='desc'):
+    def get_evaluation(start_date=None, end_date=None, store_ids=None, sort_by='roi', sort_order='desc'):
         channels = CsvLoader.get_channels()
         channel_data = CsvLoader.get_channel_data()
         
@@ -105,37 +106,106 @@ class ChannelService:
         result['conversion_rate'] = ChannelService._safe_divide(result['arrival_count'], result['exposure_count'])
         result['total_revenue'] = result['arrival_count'] * result['avg_price']
         
+        costs_map = ChannelCostService.get_costs_by_period(start_date, end_date)
+        result['total_cost'] = result['channel_id'].map(lambda cid: costs_map.get(cid, 0.0))
+        
+        result['roi'] = np.where(
+            result['total_cost'] > 0,
+            ((result['total_revenue'] - result['total_cost']) / result['total_cost'] * 100).round(2),
+            None
+        )
+        
+        result['profit'] = (result['total_revenue'] - result['total_cost']).round(2)
+        
         max_revenue = result['total_revenue'].max() if not result.empty else 1
         max_conv = result['conversion_rate'].max() if not result.empty else 1
         max_aov = result['avg_price'].max() if not result.empty else 1
         
-        result['revenue_score'] = np.where(max_revenue > 0, (result['total_revenue'] / max_revenue * 40), 0).round(2)
-        result['conv_score'] = np.where(max_conv > 0, (result['conversion_rate'] / max_conv * 35), 0).round(2)
-        result['aov_score'] = np.where(max_aov > 0, (result['avg_price'] / max_aov * 25), 0).round(2)
-        result['score'] = (result['revenue_score'] + result['conv_score'] + result['aov_score']).round(2)
+        result['revenue_score'] = np.where(max_revenue > 0, (result['total_revenue'] / max_revenue * 30), 0).round(2)
+        result['conv_score'] = np.where(max_conv > 0, (result['conversion_rate'] / max_conv * 25), 0).round(2)
+        result['aov_score'] = np.where(max_aov > 0, (result['avg_price'] / max_aov * 20), 0).round(2)
         
-        def get_grade(score):
-            if score >= 80:
-                return 'A'
-            elif score >= 60:
-                return 'B'
-            elif score >= 40:
-                return 'C'
+        valid_roi = result[result['roi'].notna()]['roi']
+        if len(valid_roi) > 0:
+            max_roi = valid_roi.max()
+            min_roi = valid_roi.min()
+            roi_range = max_roi - min_roi if max_roi != min_roi else 1
+            result['roi_score'] = np.where(
+                result['roi'].notna(),
+                ((result['roi'] - min_roi) / roi_range * 25).round(2),
+                0
+            )
+        else:
+            result['roi_score'] = 0
+        
+        result['total_score'] = (result['revenue_score'] + result['conv_score'] + result['aov_score'] + result['roi_score']).round(2)
+        
+        def get_suggestion(row):
+            roi = row['roi']
+            conv_rate = row['conversion_rate']
+            cost = row['total_cost']
+            revenue = row['total_revenue']
+            
+            if roi is None:
+                return '暂未录入成本，请补充投放成本数据'
+            
+            if roi >= 200:
+                if conv_rate > 0.03:
+                    return 'ROI极高且转化稳定，建议加大投放预算，抢占更多流量'
+                else:
+                    return 'ROI高但转化偏低，建议优化落地页提升转化率，进一步放大收益'
+            elif roi >= 100:
+                if cost > 15000:
+                    return 'ROI良好但成本较高，可尝试精细化投放控制成本'
+                else:
+                    return 'ROI良好且成本可控，建议维持当前投放节奏'
+            elif roi >= 50:
+                if conv_rate < 0.02:
+                    return 'ROI一般且转化偏低，优先优化转化链路降低获客成本'
+                else:
+                    return 'ROI中等，建议测试新素材提升点击和转化'
+            elif roi >= 0:
+                if cost > 10000:
+                    return 'ROI偏低且成本高，建议缩窄投放人群，减少低效流量'
+                else:
+                    return 'ROI偏低，建议分析客户质量，考虑提升客单价策略'
             else:
-                return 'D'
+                if conv_rate > 0.025:
+                    return 'ROI为负但转化尚可，建议从客单价和成本两端优化，先保本再盈利'
+                else:
+                    return 'ROI为负且转化低，建议暂停投放或全面调整投放策略'
         
-        result['grade'] = result['score'].apply(get_grade)
+        result['suggestion'] = result.apply(get_suggestion, axis=1)
+        
+        def get_roi_level(roi):
+            if roi is None:
+                return 'unknown'
+            if roi >= 200:
+                return 'excellent'
+            elif roi >= 100:
+                return 'good'
+            elif roi >= 50:
+                return 'medium'
+            elif roi >= 0:
+                return 'low'
+            else:
+                return 'negative'
+        
+        result['roi_level'] = result['roi'].apply(get_roi_level)
         
         result['click_rate'] = result['click_rate'].round(4)
         result['conversion_rate'] = result['conversion_rate'].round(4)
         result['avg_price'] = result['avg_price'].round(2)
         result['total_revenue'] = result['total_revenue'].round(2)
+        result['total_cost'] = result['total_cost'].round(2)
         
         result = result[[
             'channel_id', 'channel_name', 'channel_type',
             'exposure_count', 'click_count', 'arrival_count',
-            'click_rate', 'conversion_rate', 'avg_price', 'total_revenue',
-            'revenue_score', 'conv_score', 'aov_score', 'score', 'grade'
+            'click_rate', 'conversion_rate', 'avg_price',
+            'total_revenue', 'total_cost', 'profit', 'roi', 'roi_level',
+            'revenue_score', 'conv_score', 'aov_score', 'roi_score',
+            'total_score', 'suggestion'
         ]]
         
         result = ChannelService._sort_data(result, sort_by, sort_order)

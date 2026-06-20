@@ -18,10 +18,44 @@
       </a-card>
     </div>
 
-    <a-card title="渠道效果综合评估" class="evaluation-card">
+    <a-card class="roi-summary-card">
+      <template #title>
+        <span>投放 ROI 总览</span>
+      </template>
+      <template #extra>
+        <a-button type="primary" @click="openCostDrawer">
+          <template #icon><EditOutlined /></template>
+          成本录入
+        </a-button>
+      </template>
+      <div class="roi-summary-grid">
+        <div class="summary-item">
+          <div class="summary-label">总投放成本</div>
+          <div class="summary-value cost">¥{{ formatNumber(totalCost) }}</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">总营收</div>
+          <div class="summary-value revenue">¥{{ formatNumber(totalRevenue) }}</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">总利润</div>
+          <div class="summary-value profit" :class="{ negative: totalProfit < 0 }">
+            ¥{{ formatNumber(totalProfit) }}
+          </div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">整体 ROI</div>
+          <div class="summary-value roi" :class="{ negative: overallRoi < 0 }">
+            {{ overallRoi !== null ? overallRoi.toFixed(1) + '%' : '--' }}
+          </div>
+        </div>
+      </div>
+    </a-card>
+
+    <a-card title="渠道 ROI 评估排名" class="evaluation-card">
       <a-table
         :columns="evaluationColumns"
-        :data-source="evaluationData"
+        :data-source="sortedEvaluationData"
         :pagination="false"
         size="middle"
         row-key="channelId"
@@ -50,6 +84,16 @@
               <span>{{ record.channelName }}</span>
             </div>
           </template>
+          <template v-else-if="column.key === 'roi'">
+            <span class="roi-value" :class="getRoiClass(record.roiLevel)">
+              {{ record.roi !== null ? record.roi.toFixed(1) + '%' : '--' }}
+            </span>
+          </template>
+          <template v-else-if="column.key === 'totalCost' || column.key === 'totalRevenue' || column.key === 'profit'">
+            <span :class="{ 'negative-value': column.key === 'profit' && record.profit < 0 }">
+              ¥{{ formatNumber(record[column.key]) }}
+            </span>
+          </template>
           <template v-else-if="column.key === 'totalScore'">
             <a-progress
               :percent="record.totalScore"
@@ -65,18 +109,81 @@
         </template>
       </a-table>
     </a-card>
+
+    <a-drawer
+      v-model:open="costDrawerVisible"
+      title="渠道月度成本录入"
+      width="720px"
+      :mask-closable="false"
+      @close="handleCostDrawerClose"
+    >
+      <div class="cost-drawer-content">
+        <div class="cost-filter-bar">
+          <a-select v-model:value="selectedMonth" style="width: 160px">
+            <a-select-option v-for="m in availableMonths" :key="m" :value="m">
+              {{ m }}
+            </a-select-option>
+          </a-select>
+          <span class="cost-filter-tip">选择月份，录入各渠道当月投放成本</span>
+        </div>
+
+        <a-table
+          :columns="costTableColumns"
+          :data-source="costTableData"
+          :pagination="false"
+          size="middle"
+          row-key="channelId"
+          bordered
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'channelName'">
+              <div class="channel-info">
+                <div
+                  class="channel-icon small"
+                  :style="{ backgroundColor: getChannelColor(record.channelId) }"
+                >
+                  {{ record.channelName.charAt(0) }}
+                </div>
+                <span>{{ record.channelName }}</span>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'cost'">
+              <a-input-number
+                v-model:value="editingCosts[record.channelId]"
+                :min="0"
+                :precision="2"
+                style="width: 100%"
+                placeholder="输入投放成本"
+                @change="handleCostChange(record.channelId, $event)"
+              />
+            </template>
+          </template>
+        </a-table>
+
+        <div class="cost-drawer-footer">
+          <a-button @click="handleCostDrawerClose">取消</a-button>
+          <a-button type="primary" @click="saveCosts" :loading="savingCosts">
+            保存成本
+          </a-button>
+        </div>
+      </div>
+    </a-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, reactive } from 'vue'
+import { EditOutlined } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
 import PlotlyChart from '@/components/charts/PlotlyChart.vue'
 import { channelApi } from '@/api/channel'
+import { channelCostApi } from '@/api/channelCost'
 import { useFilter } from '@/composables/useFilter'
 import type {
   ChannelConversion,
   ChannelAov,
   ChannelEvaluation,
+  ChannelCostMap,
 } from '@/types'
 
 const { filterParams } = useFilter()
@@ -84,6 +191,12 @@ const { filterParams } = useFilter()
 const conversionData = ref<ChannelConversion[]>([])
 const aovData = ref<ChannelAov[]>([])
 const evaluationData = ref<ChannelEvaluation[]>([])
+const allCosts = ref<ChannelCostMap>({})
+
+const costDrawerVisible = ref(false)
+const selectedMonth = ref('')
+const editingCosts = reactive<Record<string, number>>({})
+const savingCosts = ref(false)
 
 const chartColors = {
   C001: '#E8A0BF',
@@ -94,15 +207,66 @@ const chartColors = {
   C006: '#FFD700',
 }
 
-const evaluationColumns = [
-  { title: '排名', key: 'rank', width: 70, align: 'center' },
-  { title: '渠道名称', key: 'channelName', dataIndex: 'channelName', width: 150 },
-  { title: '转化得分', dataIndex: 'conversionScore', key: 'conversionScore', width: 100 },
-  { title: '营收得分', dataIndex: 'revenueScore', key: 'revenueScore', width: 100 },
-  { title: '成本得分', dataIndex: 'costScore', key: 'costScore', width: 100 },
-  { title: '综合评分', key: 'totalScore', dataIndex: 'totalScore', width: 180 },
-  { title: '优化建议', key: 'suggestion', dataIndex: 'suggestion' },
+const costTableColumns = [
+  { title: '渠道名称', key: 'channelName', dataIndex: 'channelName', width: 200 },
+  { title: '渠道类型', dataIndex: 'channelType', key: 'channelType', width: 140 },
+  { title: '月度投放成本（元）', key: 'cost', dataIndex: 'cost' },
 ]
+
+const evaluationColumns = [
+  { title: '排名', key: 'rank', width: 70, align: 'center' as const },
+  { title: '渠道名称', key: 'channelName', dataIndex: 'channelName', width: 160 },
+  { title: '投放成本', dataIndex: 'totalCost', key: 'totalCost', width: 120, align: 'right' as const },
+  { title: '总营收', dataIndex: 'totalRevenue', key: 'totalRevenue', width: 120, align: 'right' as const },
+  { title: '净利润', dataIndex: 'profit', key: 'profit', width: 120, align: 'right' as const },
+  { title: 'ROI', dataIndex: 'roi', key: 'roi', width: 100, align: 'right' as const, sorter: (a: ChannelEvaluation, b: ChannelEvaluation) => (a.roi ?? -999) - (b.roi ?? -999) },
+  { title: '综合评分', key: 'totalScore', dataIndex: 'totalScore', width: 160 },
+  { title: '优化建议', key: 'suggestion', dataIndex: 'suggestion', width: 240 },
+]
+
+const sortedEvaluationData = computed(() => {
+  return [...evaluationData.value].sort((a, b) => {
+    const roiA = a.roi ?? -Infinity
+    const roiB = b.roi ?? -Infinity
+    return roiB - roiA
+  })
+})
+
+const totalCost = computed(() => {
+  return evaluationData.value.reduce((sum, item) => sum + (item.totalCost || 0), 0)
+})
+
+const totalRevenue = computed(() => {
+  return evaluationData.value.reduce((sum, item) => sum + (item.totalRevenue || 0), 0)
+})
+
+const totalProfit = computed(() => {
+  return evaluationData.value.reduce((sum, item) => sum + (item.profit || 0), 0)
+})
+
+const overallRoi = computed(() => {
+  if (totalCost.value > 0) {
+    return ((totalRevenue.value - totalCost.value) / totalCost.value) * 100
+  }
+  return null
+})
+
+const availableMonths = computed(() => {
+  const months: string[] = []
+  for (let m = 1; m <= 12; m++) {
+    months.push(`2024-${String(m).padStart(2, '0')}`)
+  }
+  return months.reverse()
+})
+
+const costTableData = computed(() => {
+  return evaluationData.value.map(item => ({
+    channelId: item.channelId,
+    channelName: item.channelName,
+    channelType: item.channelType,
+    cost: allCosts.value[item.channelId]?.[selectedMonth.value] || 0,
+  }))
+})
 
 const conversionChartData = computed(() => {
   const sorted = [...conversionData.value].sort(
@@ -198,18 +362,92 @@ function getScoreColor(score: number): string {
   return '#ff4d4f'
 }
 
+function getRoiClass(level: string): string {
+  const map: Record<string, string> = {
+    excellent: 'roi-excellent',
+    good: 'roi-good',
+    medium: 'roi-medium',
+    low: 'roi-low',
+    negative: 'roi-negative',
+    unknown: 'roi-unknown',
+  }
+  return map[level] || 'roi-unknown'
+}
+
+function formatNumber(num: number): string {
+  if (num === null || num === undefined) return '0'
+  return num.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
+function openCostDrawer() {
+  if (evaluationData.value.length > 0 && availableMonths.value.length > 0) {
+    selectedMonth.value = availableMonths.value[0]
+  }
+  costDrawerVisible.value = true
+  syncEditingCosts()
+}
+
+function syncEditingCosts() {
+  evaluationData.value.forEach(item => {
+    const monthCost = allCosts.value[item.channelId]?.[selectedMonth.value]
+    editingCosts[item.channelId] = monthCost ?? 0
+  })
+}
+
+function handleCostChange(channelId: string, value: number | null) {
+  editingCosts[channelId] = value ?? 0
+}
+
+function handleCostDrawerClose() {
+  costDrawerVisible.value = false
+}
+
+async function saveCosts() {
+  savingCosts.value = true
+  try {
+    const costsData = Object.entries(editingCosts).map(([channelId, cost]) => ({
+      channelId,
+      statMonth: selectedMonth.value,
+      cost: cost || 0,
+    }))
+
+    await channelCostApi.batchSaveChannelCosts(costsData)
+
+    allCosts.value = await channelCostApi.getAllChannelCosts()
+    await loadEvaluation()
+
+    message.success('成本保存成功')
+    costDrawerVisible.value = false
+  } catch (error) {
+    console.error('保存成本失败:', error)
+    message.error('保存失败，请重试')
+  } finally {
+    savingCosts.value = false
+  }
+}
+
 async function loadData() {
   try {
-    const [conversion, aov, evaluation] = await Promise.all([
+    const [conversion, aov, costs] = await Promise.all([
       channelApi.getChannelConversion(filterParams.value),
       channelApi.getChannelAov(filterParams.value),
-      channelApi.getChannelEvaluation(filterParams.value),
+      channelCostApi.getAllChannelCosts(),
     ])
     conversionData.value = conversion
     aovData.value = aov
-    evaluationData.value = [...evaluation].sort((a, b) => b.totalScore - a.totalScore)
+    allCosts.value = costs as ChannelCostMap
+    await loadEvaluation()
   } catch (error) {
     console.error('加载数据失败:', error)
+  }
+}
+
+async function loadEvaluation() {
+  try {
+    const evaluation = await channelApi.getChannelEvaluation(filterParams.value)
+    evaluationData.value = evaluation
+  } catch (error) {
+    console.error('加载评估数据失败:', error)
   }
 }
 
@@ -220,6 +458,12 @@ watch(
   },
   { deep: true }
 )
+
+watch(selectedMonth, () => {
+  if (costDrawerVisible.value) {
+    syncEditingCosts()
+  }
+})
 
 onMounted(() => {
   loadData()
@@ -242,6 +486,58 @@ onMounted(() => {
 .conversion-card,
 .aov-card {
   min-height: 440px;
+}
+
+.roi-summary-card {
+  min-height: 140px;
+}
+
+.roi-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.summary-item {
+  text-align: center;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.summary-label {
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+.summary-value {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.summary-value.cost {
+  color: #fa8c16;
+}
+
+.summary-value.revenue {
+  color: #1890ff;
+}
+
+.summary-value.profit {
+  color: #52c41a;
+}
+
+.summary-value.profit.negative {
+  color: #ff4d4f;
+}
+
+.summary-value.roi {
+  color: #722ed1;
+}
+
+.summary-value.roi.negative {
+  color: #ff4d4f;
 }
 
 .evaluation-card {
@@ -294,14 +590,84 @@ onMounted(() => {
   font-size: 14px;
 }
 
+.channel-icon.small {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
 .suggestion-text {
   font-size: 13px;
   color: #666;
 }
 
+.roi-value {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.roi-excellent {
+  color: #52c41a;
+}
+
+.roi-good {
+  color: #1890ff;
+}
+
+.roi-medium {
+  color: #faad14;
+}
+
+.roi-low {
+  color: #fa8c16;
+}
+
+.roi-negative {
+  color: #ff4d4f;
+}
+
+.roi-unknown {
+  color: #999;
+}
+
+.negative-value {
+  color: #ff4d4f;
+}
+
+.cost-drawer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cost-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cost-filter-tip {
+  font-size: 12px;
+  color: #999;
+}
+
+.cost-drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
 @media (max-width: 900px) {
   .top-section {
     grid-template-columns: 1fr;
+  }
+
+  .roi-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>
