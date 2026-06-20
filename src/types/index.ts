@@ -50,13 +50,26 @@ export interface ProjectSales {
   category: string
   salesCount: number
   salesAmount: number
+  salesRatio: number
+}
+
+export interface ProjectMargin {
+  projectId: string
+  projectName: string
+  category: string
+  salesCount: number
+  salesAmount: number
   grossMargin: number
   grossMarginRate: number
+  price?: number
+  cost?: number
+  totalCost?: number
 }
 
 export interface ProjectMatrix {
   projectId: string
   projectName: string
+  category?: string
   salesAmount: number
   grossMarginRate: number
   quadrant: number

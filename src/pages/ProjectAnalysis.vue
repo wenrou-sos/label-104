@@ -51,11 +51,12 @@ import { ref, computed, onMounted, watch } from 'vue'
 import PlotlyChart from '@/components/charts/PlotlyChart.vue'
 import { projectApi } from '@/api/project'
 import { useFilter } from '@/composables/useFilter'
-import type { ProjectSales, ProjectMatrix } from '@/types'
+import type { ProjectSales, ProjectMatrix, ProjectMargin } from '@/types'
 
 const { filterParams } = useFilter()
 
 const salesData = ref<ProjectSales[]>([])
+const marginData = ref<ProjectMargin[]>([])
 const matrixData = ref<ProjectMatrix[]>([])
 
 const chartColors = [
@@ -116,20 +117,21 @@ const pieChartLayout = computed(() => ({
 }))
 
 const marginChartData = computed(() => {
-  const sorted = [...salesData.value].sort(
-    (a, b) => b.grossMarginRate - a.grossMarginRate
+  const source = marginData.value.length > 0 ? marginData.value : salesData.value
+  const sorted = [...source].sort(
+    (a: any, b: any) => Number(b.grossMarginRate ?? 0) - Number(a.grossMarginRate ?? 0)
   )
   return [
     {
-      x: sorted.map(d => (d.grossMarginRate * 100).toFixed(1) + '%'),
-      y: sorted.map(d => d.projectName),
+      x: sorted.map((d: any) => (Number(d.grossMarginRate ?? 0) * 100).toFixed(1) + '%'),
+      y: sorted.map((d: any) => d.projectName),
       type: 'bar',
       orientation: 'h',
       marker: {
         color: sorted.map((_, i) => chartColors[i % chartColors.length]),
         borderRadius: [0, 6, 6, 0],
       },
-      text: sorted.map(d => `¥${formatNumber(d.grossMargin)}`),
+      text: sorted.map((d: any) => `¥${formatNumber(Number(d.grossMargin ?? 0))}`),
       textposition: 'auto',
       hovertemplate:
         '<b>%{y}</b><br>毛利率: %{x}<br>毛利额: ¥%{text}<extra></extra>',
@@ -279,11 +281,13 @@ function formatNumber(num: number): string {
 
 async function loadData() {
   try {
-    const [sales, matrix] = await Promise.all([
+    const [sales, margin, matrix] = await Promise.all([
       projectApi.getProjectSales(filterParams.value),
+      projectApi.getProjectMargin(filterParams.value),
       projectApi.getProjectMatrix(filterParams.value),
     ])
     salesData.value = sales
+    marginData.value = margin
     matrixData.value = matrix
   } catch (error) {
     console.error('加载数据失败:', error)

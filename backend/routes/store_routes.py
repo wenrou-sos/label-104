@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from services.store_service import StoreService
+from utils.csv_loader import CsvLoader
 
 store_bp = Blueprint('store', __name__)
 
@@ -12,6 +13,12 @@ def _get_query_params():
         'sort_by': request.args.get('sortBy'),
         'sort_order': request.args.get('sortOrder', 'asc')
     }
+
+
+@store_bp.route('/', methods=['GET'])
+def get_stores():
+    stores = CsvLoader.get_stores()
+    return jsonify({'code': 200, 'message': 'success', 'data': stores.to_dict('records')})
 
 
 @store_bp.route('/metrics', methods=['GET'])

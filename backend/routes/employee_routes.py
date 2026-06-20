@@ -10,7 +10,8 @@ def _get_query_params():
         'end_date': request.args.get('endDate'),
         'store_ids': request.args.get('storeIds'),
         'sort_by': request.args.get('sortBy'),
-        'sort_order': request.args.get('sortOrder', 'asc')
+        'sort_order': request.args.get('sortOrder', 'asc'),
+        'service_type': request.args.get('serviceType')
     }
 
 

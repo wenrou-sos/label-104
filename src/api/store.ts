@@ -39,15 +39,44 @@ export function getStoreRanking(params?: {
   )
 }
 
+export interface StoreTrendRaw {
+  months: string[]
+  stores: {
+    storeId: string
+    storeName: string
+    revenues: number[]
+    customerPrices: number[]
+    visitFrequencies: number[]
+    newCustomers: number[]
+    repeatRates?: number[]
+  }[]
+}
+
 export function getStoreTrend(params?: {
   startDate?: string
   endDate?: string
   storeIds?: string
-}) {
-  return withFallback(
-    http.get<StoreTrendData[]>('/stores/trend', params),
-    mockData.trendData
-  )
+}): Promise<StoreTrendData[]> {
+  return withFallback<StoreTrendRaw>(
+    http.get<StoreTrendRaw>('/stores/trend', params),
+    mockData.trendData as unknown as StoreTrendRaw
+  ).then((raw: any) => {
+    if (Array.isArray(raw)) return raw
+    const months = raw.months || []
+    const stores = raw.stores || []
+    return months.map((month: string, idx: number) => ({
+      date: month,
+      stores: stores.map((s: any) => ({
+        storeId: s.storeId,
+        storeName: s.storeName,
+        revenue: s.revenues?.[idx] ?? 0,
+        customerPrice: s.customerPrices?.[idx] ?? 0,
+        visitFrequency: s.visitFrequencies?.[idx] ?? 0,
+        newCustomers: s.newCustomers?.[idx] ?? 0,
+        repeatRate: s.repeatRates?.[idx] ?? 0,
+      })),
+    }))
+  }) as Promise<StoreTrendData[]>
 }
 
 export const storeApi = {

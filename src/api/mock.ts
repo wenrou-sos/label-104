@@ -3,6 +3,7 @@ import type {
   StoreMetric,
   StoreTrendData,
   ProjectSales,
+  ProjectMargin,
   ProjectMatrix,
   EmployeeRanking,
   EmployeeOrderData,
@@ -50,6 +51,17 @@ function generateTrendData(): StoreTrendData[] {
 }
 
 const projectSales: ProjectSales[] = [
+  { projectId: 'P001', projectName: '面部护理套餐', category: '美容', salesCount: 320, salesAmount: 256000, salesRatio: 0.24 },
+  { projectId: 'P002', projectName: '美甲系列', category: '美甲', salesCount: 450, salesAmount: 135000, salesRatio: 0.13 },
+  { projectId: 'P003', projectName: 'SPA水疗', category: 'SPA', salesCount: 180, salesAmount: 198000, salesRatio: 0.19 },
+  { projectId: 'P004', projectName: '美发造型', category: '美发', salesCount: 280, salesAmount: 84000, salesRatio: 0.08 },
+  { projectId: 'P005', projectName: '身体护理', category: '美容', salesCount: 220, salesAmount: 176000, salesRatio: 0.17 },
+  { projectId: 'P006', projectName: '美睫嫁接', category: '美甲', salesCount: 310, salesAmount: 93000, salesRatio: 0.09 },
+  { projectId: 'P007', projectName: '光子嫩肤', category: '美容', salesCount: 95, salesAmount: 142500, salesRatio: 0.13 },
+  { projectId: 'P008', projectName: '艾灸养生', category: 'SPA', salesCount: 160, salesAmount: 72000, salesRatio: 0.07 },
+]
+
+const projectMargins: ProjectMargin[] = [
   { projectId: 'P001', projectName: '面部护理套餐', category: '美容', salesCount: 320, salesAmount: 256000, grossMargin: 153600, grossMarginRate: 0.6 },
   { projectId: 'P002', projectName: '美甲系列', category: '美甲', salesCount: 450, salesAmount: 135000, grossMargin: 94500, grossMarginRate: 0.7 },
   { projectId: 'P003', projectName: 'SPA水疗', category: 'SPA', salesCount: 180, salesAmount: 198000, grossMargin: 99000, grossMarginRate: 0.5 },
@@ -60,9 +72,10 @@ const projectSales: ProjectSales[] = [
   { projectId: 'P008', projectName: '艾灸养生', category: 'SPA', salesCount: 160, salesAmount: 72000, grossMargin: 43200, grossMarginRate: 0.6 },
 ]
 
-const projectMatrix: ProjectMatrix[] = projectSales.map(p => ({
+const projectMatrix: ProjectMatrix[] = projectMargins.map(p => ({
   projectId: p.projectId,
   projectName: p.projectName,
+  category: p.category,
   salesAmount: p.salesAmount,
   grossMarginRate: p.grossMarginRate,
   quadrant: p.salesAmount > 150000 && p.grossMarginRate > 0.55 ? 1 :
@@ -138,6 +151,7 @@ export const mockData = {
   storeMetrics,
   trendData: generateTrendData(),
   projectSales,
+  projectMargins,
   projectMatrix,
   employeeRankings,
   employeeOrderData,

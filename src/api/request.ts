@@ -1,4 +1,5 @@
 import type { ApiResponse } from '@/types'
+import { snakeToCamel } from '@/lib/utils'
 
 const BASE_URL = '/api/v1'
 
@@ -43,7 +44,7 @@ async function request<T>(
       throw new Error(data.message || '请求失败')
     }
 
-    return data
+    return snakeToCamel(data)
   } catch (error) {
     console.error('Request error:', error)
     throw error

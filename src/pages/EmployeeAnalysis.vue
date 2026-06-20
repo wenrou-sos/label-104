@@ -9,10 +9,11 @@
           @change="handleServiceTypeChange"
         >
           <a-select-option value="all">全部</a-select-option>
-          <a-select-option value="beauty">美容</a-select-option>
-          <a-select-option value="nail">美甲</a-select-option>
-          <a-select-option value="spa">SPA</a-select-option>
-          <a-select-option value="hair">美发</a-select-option>
+          <a-select-option value="皮肤管理">皮肤管理</a-select-option>
+          <a-select-option value="抗衰紧致">抗衰紧致</a-select-option>
+          <a-select-option value="美甲美睫">美甲美睫</a-select-option>
+          <a-select-option value="脱毛">脱毛</a-select-option>
+          <a-select-option value="纹绣">纹绣</a-select-option>
         </a-select>
       </div>
     </div>

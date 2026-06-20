@@ -27,7 +27,27 @@ class EmployeeService:
         return df.reset_index(drop=True)
     
     @staticmethod
-    def get_ranking(start_date=None, end_date=None, store_ids=None, sort_by='card_amount', sort_order='desc'):
+    def _filter_by_service_type(df, service_type=None):
+        if not service_type or service_type == 'all':
+            return df
+        type_map = {
+            'beauty': ['皮肤管理', '抗衰紧致'],
+            'nail': ['美甲美睫'],
+            'spa': ['脱毛'],
+            'hair': ['纹绣'],
+            '皮肤管理': ['皮肤管理'],
+            '抗衰紧致': ['抗衰紧致'],
+            '脱毛': ['脱毛'],
+            '纹绣': ['纹绣'],
+            '美甲美睫': ['美甲美睫'],
+        }
+        allowed_types = type_map.get(service_type, [service_type])
+        if 'service_type' in df.columns and allowed_types:
+            return df[df['service_type'].isin(allowed_types)]
+        return df
+
+    @staticmethod
+    def get_ranking(start_date=None, end_date=None, store_ids=None, sort_by='card_amount', sort_order='desc', service_type=None):
         employees = CsvLoader.get_employees()
         stores = CsvLoader.get_stores()
         performance = CsvLoader.get_employee_performance()
@@ -45,6 +65,11 @@ class EmployeeService:
         
         result = pd.merge(agg_perf, employees[['emp_id', 'emp_name', 'position', 'service_type']], on='emp_id', how='left')
         result = pd.merge(result, stores[['store_id', 'store_name']], on='store_id', how='left')
+        
+        result = EmployeeService._filter_by_service_type(result, service_type)
+        
+        if result.empty:
+            return []
         
         result['card_amount'] = result['card_amount'].round(2)
         result['avg_price'] = result['avg_price'].round(2)
@@ -63,7 +88,7 @@ class EmployeeService:
         return result_list
     
     @staticmethod
-    def get_orders(start_date=None, end_date=None, store_ids=None, sort_by='order_count', sort_order='desc'):
+    def get_orders(start_date=None, end_date=None, store_ids=None, sort_by='order_count', sort_order='desc', service_type=None):
         employees = CsvLoader.get_employees()
         stores = CsvLoader.get_stores()
         performance = CsvLoader.get_employee_performance()
@@ -81,6 +106,11 @@ class EmployeeService:
         
         result = pd.merge(agg_perf, employees[['emp_id', 'emp_name', 'position', 'service_type']], on='emp_id', how='left')
         result = pd.merge(result, stores[['store_id', 'store_name']], on='store_id', how='left')
+        
+        result = EmployeeService._filter_by_service_type(result, service_type)
+        
+        if result.empty:
+            return []
         
         result['card_amount'] = result['card_amount'].round(2)
         result['avg_price'] = result['avg_price'].round(2)
