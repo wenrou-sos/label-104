@@ -36,5 +36,6 @@ def get_orders():
 @employee_bp.route('/trend/<emp_id>', methods=['GET'])
 def get_employee_trend(emp_id):
     months = request.args.get('months', type=int, default=6)
-    data = EmployeeService.get_employee_trend(emp_id, months=months)
+    end_date = request.args.get('endDate')
+    data = EmployeeService.get_employee_trend(emp_id, months=months, end_date=end_date)
     return jsonify({'code': 200, 'message': 'success', 'data': data})

@@ -460,6 +460,7 @@ function handleServiceTypeChange() {
 function handleRowClick(record: EmployeeRanking) {
   return {
     style: { cursor: 'pointer' },
+    onClick: () => openDetail(record),
   }
 }
 
@@ -480,7 +481,12 @@ async function loadTrendData() {
   if (!currentEmployee.value) return
   loadingTrend.value = true
   try {
-    const data = await employeeApi.getEmployeeTrend(currentEmployee.value.empId, trendMonths.value)
+    const endDate = filterParams.value.endDate
+    const data = await employeeApi.getEmployeeTrend(
+      currentEmployee.value.empId,
+      trendMonths.value,
+      endDate
+    )
     trendData.value = data
   } catch (error) {
     console.error('加载员工业绩趋势失败:', error)

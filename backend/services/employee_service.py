@@ -131,7 +131,7 @@ class EmployeeService:
         return result.to_dict('records')
     
     @staticmethod
-    def get_employee_trend(emp_id, months=6):
+    def get_employee_trend(emp_id, months=6, end_date=None):
         performance = CsvLoader.get_employee_performance()
         employees = CsvLoader.get_employees()
         stores = CsvLoader.get_stores()
@@ -143,11 +143,35 @@ class EmployeeService:
         if emp_data.empty:
             return {'employee': None, 'trend': []}
         
-        emp_data = emp_data.sort_values('stat_month', ascending=False)
-        months_list = sorted(emp_data['stat_month'].unique().tolist(), reverse=True)[:months]
-        months_list = sorted(months_list)
+        months_available = sorted(emp_data['stat_month'].unique().tolist())
         
-        emp_data = emp_data[emp_data['stat_month'].isin(months_list)]
+        if end_date:
+            end_month = end_date[:7] if len(end_date) > 7 else end_date
+            months_available = [m for m in months_available if m <= end_month]
+        else:
+            end_month = months_available[-1] if months_available else None
+        
+        if not months_available:
+            emp_info = employees[employees['emp_id'] == emp_id].iloc[0].to_dict() if len(employees[employees['emp_id'] == emp_id]) > 0 else {}
+            store_info = {}
+            if 'store_id' in emp_info and emp_info['store_id']:
+                store_row = stores[stores['store_id'] == emp_info['store_id']]
+                if len(store_row) > 0:
+                    store_info = store_row.iloc[0].to_dict()
+            employee_full = {
+                'empId': emp_info.get('emp_id'),
+                'empName': emp_info.get('emp_name'),
+                'position': emp_info.get('position'),
+                'serviceType': emp_info.get('service_type'),
+                'storeId': emp_info.get('store_id'),
+                'storeName': store_info.get('store_name'),
+            }
+            return {'employee': employee_full, 'trend': []}
+        
+        selected_months = months_available[-months:] if len(months_available) >= months else months_available
+        selected_months = sorted(selected_months)
+        
+        emp_data = emp_data[emp_data['stat_month'].isin(selected_months)]
         
         trend_data = emp_data.groupby('stat_month').agg({
             'card_amount': 'sum',

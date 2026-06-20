@@ -63,9 +63,13 @@ export function getEmployeeOrders(params?: {
   )
 }
 
-export function getEmployeeTrend(empId: string, months: number = 6): Promise<EmployeeTrendResponse> {
+export function getEmployeeTrend(
+  empId: string,
+  months: number = 6,
+  endDate?: string
+): Promise<EmployeeTrendResponse> {
   return withFallback<EmployeeTrendResponse>(
-    http.get<EmployeeTrendResponse>(`/employees/trend/${empId}`, { months }),
+    http.get<EmployeeTrendResponse>(`/employees/trend/${empId}`, { months, endDate }),
     { employee: null, trend: [] }
   )
 }
