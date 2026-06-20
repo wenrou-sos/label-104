@@ -73,12 +73,15 @@ class MemberService:
 
         filtered = MemberService._filter_data(members, store_ids, 'register_date', start_date, end_date)
 
+        new_members = int(len(filtered))
+
         if filtered.empty:
             return {
                 'avg_recharge_cycle': 0,
                 'recharge_rate': 0,
                 'total_members': 0,
                 'active_members': 0,
+                'new_members': 0,
                 'distribution': [],
                 'stores': [],
             }
@@ -90,8 +93,8 @@ class MemberService:
 
         today = datetime.now()
         filtered = filtered.copy()
-        filtered['last_visit_date'] = pd.to_datetime(filtered['last_visit_date'])
-        filtered['days_since_visit'] = (today - filtered['last_visit_date']).dt.days
+        filtered['last_visit_date_dt'] = pd.to_datetime(filtered['last_visit_date'])
+        filtered['days_since_visit'] = (today - filtered['last_visit_date_dt']).dt.days
         active_members = int((filtered['days_since_visit'] <= 60).sum())
 
         cycle_bins = [0, 30, 60, 90, 120, 150, 180, float('inf')]
@@ -117,6 +120,7 @@ class MemberService:
             'recharge_rate': recharge_rate,
             'total_members': total_members,
             'active_members': active_members,
+            'new_members': new_members,
             'distribution': dist_list,
             'stores': store_cycles.to_dict('records'),
         }
@@ -164,22 +168,22 @@ class MemberService:
         stores = CsvLoader.get_stores()
         members = CsvLoader.get_members()
 
-        filtered = MemberService._filter_data(members, store_ids, 'last_visit_date', start_date, end_date)
+        filtered = MemberService._filter_data(members, store_ids, 'register_date', start_date, end_date)
 
         if filtered.empty:
-            return []
+            return {'total': 0, 'list': []}
 
         today = datetime.now()
         filtered = filtered.copy()
-        filtered['last_visit_date'] = pd.to_datetime(filtered['last_visit_date'])
-        filtered['days_since_visit'] = (today - filtered['last_visit_date']).dt.days
+        filtered['last_visit_date_dt'] = pd.to_datetime(filtered['last_visit_date'])
+        filtered['days_since_visit'] = (today - filtered['last_visit_date_dt']).dt.days
 
         churned = filtered[filtered['days_since_visit'] >= days].copy()
 
-        def get_churn_level(days):
-            if days >= 120:
+        def get_churn_level(d):
+            if d >= 120:
                 return 'high'
-            elif days >= 90:
+            elif d >= 90:
                 return 'medium'
             else:
                 return 'low'
@@ -190,6 +194,8 @@ class MemberService:
         churned['member_name'] = churned['member_id'].apply(MemberService._generate_member_name)
 
         churned = churned.sort_values(by='days_since_visit', ascending=False)
+        total = int(len(churned))
+
         if limit and limit > 0:
             churned = churned.head(limit)
 
@@ -199,11 +205,11 @@ class MemberService:
                 'member_id': str(row['member_id']),
                 'member_name': str(row['member_name']),
                 'store_name': str(row['store_name']),
-                'last_visit_date': row['last_visit_date'].strftime('%Y-%m-%d') if pd.notna(row['last_visit_date']) else '',
+                'last_visit_date': row['last_visit_date_dt'].strftime('%Y-%m-%d') if pd.notna(row['last_visit_date_dt']) else '',
                 'days_since_last_visit': int(row['days_since_visit']),
                 'total_recharge': round(float(row['total_recharge']), 2),
                 'total_visits': int(row['total_visits']),
                 'level': str(row['level']),
             })
 
-        return result
+        return {'total': total, 'list': result}

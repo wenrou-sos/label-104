@@ -73,7 +73,7 @@
 
       <a-card title="流失预警名单" class="churn-card">
         <template #extra>
-          <a-tag color="red">共 {{ churnMembers.length }} 人</a-tag>
+          <a-tag color="red">共 {{ churnTotal }} 人</a-tag>
         </template>
         <a-table
           :columns="churnColumns"
@@ -132,7 +132,7 @@ import {
 import PlotlyChart from '@/components/charts/PlotlyChart.vue'
 import { memberApi } from '@/api/member'
 import { useFilter } from '@/composables/useFilter'
-import type { MemberCycleStats, ChurnMember } from '@/types'
+import type { MemberCycleStats, ChurnMember, ChurnResponse } from '@/types'
 
 const { filterParams } = useFilter()
 
@@ -141,8 +141,10 @@ const cycleStats = ref<MemberCycleStats>({
   rechargeRate: 0.68,
   totalMembers: 5280,
   activeMembers: 3680,
+  newMembers: 0,
 })
 const churnMembers = ref<ChurnMember[]>([])
+const churnTotal = ref(0)
 
 const churnColumns = [
   { title: '会员姓名', key: 'memberName', dataIndex: 'memberName' },
@@ -157,8 +159,8 @@ const churnColumns = [
 const activityChartData = computed(() => {
   const active = cycleStats.value.activeMembers
   const inactive = cycleStats.value.totalMembers - active
-  const newMembers = Math.round(cycleStats.value.totalMembers * 0.15)
-  const churned = churnMembers.value.length
+  const newMembers = cycleStats.value.newMembers || 0
+  const churned = churnTotal.value
 
   return [
     {
@@ -170,8 +172,8 @@ const activityChartData = computed(() => {
         borderRadius: [6, 6, 0, 0],
       },
       text: [
-        `${active}人 (${((active / cycleStats.value.totalMembers) * 100).toFixed(1)}%)`,
-        `${inactive}人 (${((inactive / cycleStats.value.totalMembers) * 100).toFixed(1)}%)`,
+        `${active}人 (${((active / (cycleStats.value.totalMembers || 1)) * 100).toFixed(1)}%)`,
+        `${inactive}人 (${((inactive / (cycleStats.value.totalMembers || 1)) * 100).toFixed(1)}%)`,
         `${newMembers}人`,
         `${churned}人`,
       ],
@@ -225,12 +227,13 @@ function getLevelText(level: string): string {
 
 async function loadData() {
   try {
-    const [cycle, churn] = await Promise.all([
+    const [cycle, churnResp] = await Promise.all([
       memberApi.getMemberCycle(filterParams.value),
       memberApi.getChurnMembers(filterParams.value),
     ])
     cycleStats.value = cycle
-    churnMembers.value = churn
+    churnTotal.value = churnResp.total
+    churnMembers.value = churnResp.list
   } catch (error) {
     console.error('加载数据失败:', error)
   }

@@ -119,6 +119,7 @@ export interface MemberCycleStats {
   rechargeRate: number
   totalMembers: number
   activeMembers: number
+  newMembers: number
 }
 
 export interface ChurnMember {
@@ -130,6 +131,11 @@ export interface ChurnMember {
   totalRecharge: number
   totalVisits: number
   level: 'high' | 'medium' | 'low'
+}
+
+export interface ChurnResponse {
+  total: number
+  list: ChurnMember[]
 }
 
 export interface Channel {

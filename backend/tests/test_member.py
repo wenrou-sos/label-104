@@ -25,14 +25,23 @@ def test_cycle():
     print('  [OK] cycle KPI structure correct')
     print()
 
+def _unwrap_churn(resp_data):
+    if isinstance(resp_data, dict) and 'list' in resp_data:
+        return resp_data.get('list', [])
+    return resp_data
+
+
 def test_churn():
     r = requests.get(BASE + '/api/v1/members/churn', params={**params, 'days': 60, 'limit': 10}, timeout=10)
     print('=== CHURN (days=60, limit=10) ===')
     print('STATUS:', r.status_code)
     data = r.json()
-    lst = data.get('data', [])
-    print('  count:', len(lst))
-    assert isinstance(lst, list), 'churn data should be list'
+    raw = data.get('data', {})
+    if isinstance(raw, dict) and 'total' in raw:
+        print('  total:', raw.get('total'))
+    lst = _unwrap_churn(raw)
+    print('  list count:', len(lst))
+    assert isinstance(lst, list), 'churn data should be list (inside dict or direct)'
     if lst:
         sample = lst[0]
         print('  sample keys:', list(sample.keys()))
@@ -48,9 +57,9 @@ def test_churn():
 
 def test_churn_filter_days():
     r_60 = requests.get(BASE + '/api/v1/members/churn', params={**params, 'days': 60, 'limit': 500}, timeout=10)
-    lst_60 = r_60.json().get('data', [])
+    lst_60 = _unwrap_churn(r_60.json().get('data', []))
     r_90 = requests.get(BASE + '/api/v1/members/churn', params={**params, 'days': 90, 'limit': 500}, timeout=10)
-    lst_90 = r_90.json().get('data', [])
+    lst_90 = _unwrap_churn(r_90.json().get('data', []))
     print('=== CHURN FILTER (days=60 vs days=90) ===')
     print(f'  days=60 count: {len(lst_60)}, days=90 count: {len(lst_90)}')
     assert len(lst_60) > len(lst_90) > 0, 'days=60 should have more members than days=90'
@@ -68,9 +77,9 @@ def test_churn_filter_days():
 
 def test_member_name_consistent():
     r = requests.get(BASE + '/api/v1/members/churn', params={**params, 'days': 60, 'limit': 50}, timeout=10)
-    lst1 = r.json().get('data', [])
+    lst1 = _unwrap_churn(r.json().get('data', []))
     r2 = requests.get(BASE + '/api/v1/members/churn', params={**params, 'days': 60, 'limit': 50}, timeout=10)
-    lst2 = r2.json().get('data', [])
+    lst2 = _unwrap_churn(r2.json().get('data', []))
     print('=== NAME CONSISTENCY ===')
     if lst1 and lst2:
         names1 = {m['member_id']: m['member_name'] for m in lst1}

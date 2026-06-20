@@ -21,6 +21,7 @@
             ok-text="开始对比"
             cancel-text="取消"
             @ok="confirmCompareStores"
+            @cancel="cancelCompareModal"
           >
             <div style="margin-bottom: 8px; color: #666; font-size: 13px">
               请选择 2-3 家门店进行对比，当前已选 <b>{{ compareStoreIds.length }}</b> 家
@@ -172,7 +173,7 @@
             <template v-else-if="column.key === 'storeName'">
               <span class="rank-store-name">
                 <a-tag
-                  v-if="compareMode && compareStoreIds.includes(record.storeId)"
+                  v-if="compareMode && confirmedCompareIds.includes(record.storeId)"
                   color="purple"
                   style="margin-right: 6px"
                 >对比</a-tag>
@@ -261,12 +262,24 @@ function getStoreColor(storeId: string, idx?: number): string {
 
 function handleCompareModeChange(val: boolean) {
   if (val) {
-    compareStoreIds.value = confirmedCompareIds.value.length > 0
+    compareStoreIds.value = confirmedCompareIds.value.length >= 2
       ? [...confirmedCompareIds.value]
       : metricsData.value.slice(0, Math.min(2, metricsData.value.length)).map(m => m.storeId)
     compareModalOpen.value = true
   } else {
     confirmedCompareIds.value = []
+    compareStoreIds.value = []
+    compareModalOpen.value = false
+  }
+}
+
+function cancelCompareModal() {
+  compareModalOpen.value = false
+  if (confirmedCompareIds.value.length < 2) {
+    compareMode.value = false
+    compareStoreIds.value = []
+  } else {
+    compareStoreIds.value = [...confirmedCompareIds.value]
   }
 }
 
@@ -279,8 +292,22 @@ function validateCompareSelection(val: string[]) {
 function confirmCompareStores() {
   if (compareStoreIds.value.length < 2) return
   confirmedCompareIds.value = [...compareStoreIds.value]
-  compareStoreIds.value = [...confirmedCompareIds.value]
   compareModalOpen.value = false
+}
+
+function validateCompareAfterLoad() {
+  if (!compareMode.value) return
+  const validIds = confirmedCompareIds.value.filter(id =>
+    metricsData.value.some(m => m.storeId === id)
+  )
+  if (validIds.length < 2) {
+    compareMode.value = false
+    confirmedCompareIds.value = []
+    compareStoreIds.value = []
+  } else {
+    confirmedCompareIds.value = validIds
+    compareStoreIds.value = [...validIds]
+  }
 }
 
 function getRowClassName(record: StoreMetric) {
@@ -487,12 +514,10 @@ async function loadData() {
     ])
     metricsData.value = metrics
     trendData.value = trend
-    if (metrics.length > 0 && confirmedCompareIds.value.length === 0 && !compareMode.value) {
+    if (metrics.length > 0 && !compareMode.value) {
       Object.keys(storeColorMap).forEach(k => delete storeColorMap[k])
     }
-    if (metrics.length > 0 && confirmedCompareIds.value.length === 0) {
-      confirmedCompareIds.value = metrics.slice(0, 2).map(m => m.storeId)
-    }
+    validateCompareAfterLoad()
   } catch (error) {
     console.error('加载数据失败:', error)
   }

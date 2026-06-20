@@ -106,6 +106,7 @@ const memberCycleStats: MemberCycleStats = {
   rechargeRate: 0.68,
   totalMembers: 5280,
   activeMembers: 3680,
+  newMembers: 792,
 }
 
 const churnMembers: ChurnMember[] = [

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($json = Get-Content -Path \"D:\\\\proje\\\\label-104\\\\record.json\" -Raw -Encoding UTF8; $Utf8NoBom = [System.Text.Encoding]::UTF8.GetBytes\\($json\\); [System.IO.File]::WriteAllBytes\\(\"D:\\\\proje\\\\label-104\\\\record_utf8.json\", $Utf8NoBom\\))",
+      "PowerShell(try { Get-Content -Path \"D:\\\\proje\\\\label-104\\\\record.json\" -Raw -Encoding UTF8 | ConvertFrom-Json; Write-Output \"JSON is valid\" } catch { Write-Output \"JSON invalid: $_\" })"
+    ]
+  }
+}

@@ -24,24 +24,34 @@ def test_cycle_date_filter():
     print('  [OK] cycle date filter works')
     print()
 
+def _unwrap_churn(resp_data):
+    if isinstance(resp_data, dict) and 'list' in resp_data:
+        return resp_data['list']
+    return resp_data
+
+
+def _unwrap_churn_total(resp_data):
+    if isinstance(resp_data, dict) and 'total' in resp_data:
+        return resp_data['total']
+    return len(resp_data) if isinstance(resp_data, list) else 0
+
+
 def test_churn_date_filter():
     print('=== CHURN DATE FILTER ===')
-    params_all = {'storeIds': ALL_STORES, 'days': 60, 'limit': 1000, 'startDate': '2026-02-01', 'endDate': '2026-06-30'}
-    params_mar = {'storeIds': ALL_STORES, 'days': 60, 'limit': 1000, 'startDate': '2026-03-01', 'endDate': '2026-03-31'}
+    params_all = {'storeIds': ALL_STORES, 'days': 60, 'limit': 1000, 'startDate': '2024-06-01', 'endDate': '2024-12-31'}
+    params_q3 = {'storeIds': ALL_STORES, 'days': 60, 'limit': 1000, 'startDate': '2024-07-01', 'endDate': '2024-09-30'}
     r_all = requests.get(BASE + '/api/v1/members/churn', params=params_all, timeout=10)
-    r_mar = requests.get(BASE + '/api/v1/members/churn', params=params_mar, timeout=10)
-    lst_all = r_all.json()['data']
-    lst_mar = r_mar.json()['data']
-    print(f"  all range churn count: {len(lst_all)}")
-    print(f"  March only churn count: {len(lst_mar)}")
-    if lst_all:
-        dates_all = set(m['last_visit_date'][:7] for m in lst_all)
-        print(f"  months in all range: {sorted(dates_all)}")
-    if lst_mar:
-        for m in lst_mar:
-            assert m['last_visit_date'].startswith('2026-03'), f"should be March only, got {m['last_visit_date']}"
-        print(f"  all March entries start with 2026-03: OK")
-    assert len(lst_mar) <= len(lst_all), 'March subset should be <= all range'
+    r_q3 = requests.get(BASE + '/api/v1/members/churn', params=params_q3, timeout=10)
+    raw_all = r_all.json()['data']
+    raw_q3 = r_q3.json()['data']
+    lst_all = _unwrap_churn(raw_all)
+    lst_q3 = _unwrap_churn(raw_q3)
+    total_all = _unwrap_churn_total(raw_all)
+    total_q3 = _unwrap_churn_total(raw_q3)
+    print(f"  2024 H2 total churn: {total_all} (list {len(lst_all)})")
+    print(f"  2024 Q3  total churn: {total_q3} (list {len(lst_q3)})")
+    assert total_all > 0, '2024 H2 should have some churned members'
+    assert total_q3 <= total_all, 'Q3 subset should be <= H2 total'
     print('  [OK] churn date filter works')
     print()
 
