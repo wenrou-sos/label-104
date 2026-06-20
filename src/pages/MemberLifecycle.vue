@@ -343,7 +343,11 @@ async function saveWarningConfig() {
     warningConfig.value = config
     message.success('预警配置保存成功')
     configDrawerOpen.value = false
-    const churnResp = await memberApi.getChurnMembers(filterParams.value)
+    const [cycle, churnResp] = await Promise.all([
+      memberApi.getMemberCycle(filterParams.value),
+      memberApi.getChurnMembers(filterParams.value),
+    ])
+    cycleStats.value = cycle
     churnTotal.value = churnResp.total
     churnMembers.value = churnResp.list
   } catch (error) {

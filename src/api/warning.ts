@@ -24,11 +24,9 @@ export function getWarningConfig(): Promise<WarningConfig> {
   )
 }
 
-export function saveWarningConfig(config: Partial<WarningConfig>): Promise<WarningConfig> {
-  return withFallback<WarningConfig>(
-    http.post<WarningConfig>('/warnings/config', config),
-    { ...DEFAULT_CONFIG, ...config }
-  )
+export async function saveWarningConfig(config: Partial<WarningConfig>): Promise<WarningConfig> {
+  const res = await http.post<WarningConfig>('/warnings/config', config)
+  return res.data
 }
 
 export const warningApi = {

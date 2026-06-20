@@ -9,9 +9,11 @@ class StoreService:
         filtered = df.copy()
         
         if start_date and 'stat_month' in filtered.columns:
-            filtered = filtered[filtered['stat_month'] >= start_date]
+            start_month = start_date[:7] if len(start_date) > 7 else start_date
+            filtered = filtered[filtered['stat_month'] >= start_month]
         if end_date and 'stat_month' in filtered.columns:
-            filtered = filtered[filtered['stat_month'] <= end_date]
+            end_month = end_date[:7] if len(end_date) > 7 else end_date
+            filtered = filtered[filtered['stat_month'] <= end_month]
         if store_ids and 'store_id' in filtered.columns:
             if isinstance(store_ids, str):
                 store_ids = [s.strip() for s in store_ids.split(',') if s.strip()]
@@ -21,7 +23,7 @@ class StoreService:
         return filtered
 
     @staticmethod
-    def _calculate_revenue_change(all_metrics, store_id, current_start, current_end):
+    def _calculate_revenue_change(all_metrics, store_id):
         try:
             store_data = all_metrics[all_metrics['store_id'] == store_id].copy()
             if store_data.empty:
@@ -32,22 +34,11 @@ class StoreService:
             if len(months) < 2:
                 return None, False
 
-            current_months = [m for m in months if (not current_start or m >= current_start) and (not current_end or m <= current_end)]
-            if not current_months:
-                current_months = months[-1:]
+            latest_month = months[-1]
+            prev_month = months[-2]
 
-            current_revenue = store_data[store_data['stat_month'].isin(current_months)]['revenue'].sum()
-
-            current_month_idx = months.index(current_months[-1]) if current_months[-1] in months else len(months) - 1
-            prev_month_idx = current_month_idx - len(current_months)
-            if prev_month_idx < 0:
-                return None, False
-
-            prev_months = months[max(0, prev_month_idx - len(current_months) + 1):prev_month_idx + 1]
-            if not prev_months:
-                return None, False
-
-            prev_revenue = store_data[store_data['stat_month'].isin(prev_months)]['revenue'].sum()
+            current_revenue = float(store_data[store_data['stat_month'] == latest_month]['revenue'].sum())
+            prev_revenue = float(store_data[store_data['stat_month'] == prev_month]['revenue'].sum())
 
             if prev_revenue == 0:
                 change_pct = 0.0 if current_revenue == 0 else float('inf') if current_revenue > 0 else float('-inf')
@@ -57,7 +48,7 @@ class StoreService:
             threshold = WarningService.get_store_revenue_drop_threshold()
             is_warning = change_pct <= -threshold
 
-            return change_pct, is_warning
+            return float(change_pct), bool(is_warning)
         except Exception:
             return None, False
     
@@ -99,7 +90,7 @@ class StoreService:
         records = result.to_dict('records')
         for rec in records:
             change_pct, is_warning = StoreService._calculate_revenue_change(
-                all_metrics, rec['store_id'], start_date, end_date
+                all_metrics, rec['store_id']
             )
             rec['revenueChange'] = float(change_pct) if change_pct is not None else None
             rec['revenueWarning'] = bool(is_warning) if is_warning is not None else False
