@@ -28,7 +28,7 @@ class MemberService:
         return surname + given
 
     @staticmethod
-    def _filter_data(df, store_ids=None):
+    def _filter_by_store(df, store_ids=None):
         filtered = df.copy()
         if store_ids and 'store_id' in filtered.columns:
             if isinstance(store_ids, str):
@@ -38,11 +38,40 @@ class MemberService:
         return filtered
 
     @staticmethod
+    def _filter_by_date(df, date_col, start_date=None, end_date=None):
+        if not start_date and not end_date:
+            return df
+        filtered = df.copy()
+        if date_col not in filtered.columns:
+            return filtered
+        col_dt = pd.to_datetime(filtered[date_col], errors='coerce')
+        if start_date:
+            try:
+                sd = pd.to_datetime(start_date)
+                filtered = filtered[col_dt >= sd]
+                col_dt = pd.to_datetime(filtered[date_col], errors='coerce')
+            except Exception:
+                pass
+        if end_date:
+            try:
+                ed = pd.to_datetime(end_date)
+                filtered = filtered[col_dt <= ed]
+            except Exception:
+                pass
+        return filtered
+
+    @staticmethod
+    def _filter_data(df, store_ids=None, date_col='register_date', start_date=None, end_date=None):
+        filtered = MemberService._filter_by_store(df, store_ids)
+        filtered = MemberService._filter_by_date(filtered, date_col, start_date, end_date)
+        return filtered
+
+    @staticmethod
     def get_cycle(store_ids=None, start_date=None, end_date=None):
         stores = CsvLoader.get_stores()
         members = CsvLoader.get_members()
 
-        filtered = MemberService._filter_data(members, store_ids)
+        filtered = MemberService._filter_data(members, store_ids, 'register_date', start_date, end_date)
 
         if filtered.empty:
             return {
@@ -97,7 +126,7 @@ class MemberService:
         stores = CsvLoader.get_stores()
         members = CsvLoader.get_members()
 
-        filtered = MemberService._filter_data(members, store_ids)
+        filtered = MemberService._filter_data(members, store_ids, 'register_date', start_date, end_date)
 
         if filtered.empty:
             return {'overall': {}, 'stores': []}
@@ -135,7 +164,7 @@ class MemberService:
         stores = CsvLoader.get_stores()
         members = CsvLoader.get_members()
 
-        filtered = MemberService._filter_data(members, store_ids)
+        filtered = MemberService._filter_data(members, store_ids, 'last_visit_date', start_date, end_date)
 
         if filtered.empty:
             return []
