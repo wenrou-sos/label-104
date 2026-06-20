@@ -31,3 +31,10 @@ def get_orders():
     sort_order = params.pop('sort_order') or 'desc'
     data = EmployeeService.get_orders(**params, sort_by=sort_by, sort_order=sort_order)
     return jsonify({'code': 200, 'message': 'success', 'data': data})
+
+
+@employee_bp.route('/trend/<emp_id>', methods=['GET'])
+def get_employee_trend(emp_id):
+    months = request.args.get('months', type=int, default=6)
+    data = EmployeeService.get_employee_trend(emp_id, months=months)
+    return jsonify({'code': 200, 'message': 'success', 'data': data})

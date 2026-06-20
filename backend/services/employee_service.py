@@ -8,9 +8,11 @@ class EmployeeService:
         filtered = df.copy()
         
         if start_date and 'stat_month' in filtered.columns:
-            filtered = filtered[filtered['stat_month'] >= start_date]
+            start_month = start_date[:7] if len(start_date) > 7 else start_date
+            filtered = filtered[filtered['stat_month'] >= start_month]
         if end_date and 'stat_month' in filtered.columns:
-            filtered = filtered[filtered['stat_month'] <= end_date]
+            end_month = end_date[:7] if len(end_date) > 7 else end_date
+            filtered = filtered[filtered['stat_month'] <= end_month]
         if store_ids and 'store_id' in filtered.columns:
             if isinstance(store_ids, str):
                 store_ids = [s.strip() for s in store_ids.split(',') if s.strip()]
@@ -127,3 +129,59 @@ class EmployeeService:
         result = EmployeeService._sort_data(result, sort_by, sort_order)
         
         return result.to_dict('records')
+    
+    @staticmethod
+    def get_employee_trend(emp_id, months=6):
+        performance = CsvLoader.get_employee_performance()
+        employees = CsvLoader.get_employees()
+        stores = CsvLoader.get_stores()
+        
+        if not emp_id:
+            return {'employee': None, 'trend': []}
+        
+        emp_data = performance[performance['emp_id'] == emp_id].copy()
+        if emp_data.empty:
+            return {'employee': None, 'trend': []}
+        
+        emp_data = emp_data.sort_values('stat_month', ascending=False)
+        months_list = sorted(emp_data['stat_month'].unique().tolist(), reverse=True)[:months]
+        months_list = sorted(months_list)
+        
+        emp_data = emp_data[emp_data['stat_month'].isin(months_list)]
+        
+        trend_data = emp_data.groupby('stat_month').agg({
+            'card_amount': 'sum',
+            'order_count': 'sum',
+            'avg_price': 'mean'
+        }).reset_index()
+        
+        trend_data['card_amount'] = trend_data['card_amount'].round(2)
+        trend_data['avg_price'] = trend_data['avg_price'].round(2)
+        
+        emp_info = employees[employees['emp_id'] == emp_id].iloc[0].to_dict() if len(employees[employees['emp_id'] == emp_id]) > 0 else {}
+        store_info = {}
+        if 'store_id' in emp_info and emp_info['store_id']:
+            store_row = stores[stores['store_id'] == emp_info['store_id']]
+            if len(store_row) > 0:
+                store_info = store_row.iloc[0].to_dict()
+        
+        employee_full = {
+            'empId': emp_info.get('emp_id'),
+            'empName': emp_info.get('emp_name'),
+            'position': emp_info.get('position'),
+            'serviceType': emp_info.get('service_type'),
+            'storeId': emp_info.get('store_id'),
+            'storeName': store_info.get('store_name'),
+        }
+        
+        trend_list = trend_data.to_dict('records')
+        trend_result = []
+        for item in trend_list:
+            trend_result.append({
+                'statMonth': item['stat_month'],
+                'cardAmount': float(item['card_amount']),
+                'orderCount': int(item['order_count']),
+                'avgPrice': float(item['avg_price']),
+            })
+        
+        return {'employee': employee_full, 'trend': trend_result}

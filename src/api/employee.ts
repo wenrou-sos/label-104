@@ -1,6 +1,6 @@
 import { http } from './request'
 import { mockData } from './mock'
-import type { EmployeeRanking, EmployeeOrderData, ApiResponse } from '@/types'
+import type { EmployeeRanking, EmployeeOrderData, EmployeeTrendResponse, ApiResponse } from '@/types'
 
 async function withFallback<T>(apiCall: Promise<ApiResponse<T>>, fallback: T): Promise<T> {
   try {
@@ -63,9 +63,17 @@ export function getEmployeeOrders(params?: {
   )
 }
 
+export function getEmployeeTrend(empId: string, months: number = 6): Promise<EmployeeTrendResponse> {
+  return withFallback<EmployeeTrendResponse>(
+    http.get<EmployeeTrendResponse>(`/employees/trend/${empId}`, { months }),
+    { employee: null, trend: [] }
+  )
+}
+
 export const employeeApi = {
   getEmployeeRanking,
   getEmployeeOrders,
+  getEmployeeTrend,
 }
 
 export default employeeApi

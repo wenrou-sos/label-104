@@ -26,6 +26,7 @@
           :pagination="false"
           size="middle"
           row-key="empId"
+          :custom-row="handleRowClick"
         >
           <template #bodyCell="{ column, record, index }">
             <template v-if="column.key === 'rank'">
@@ -57,6 +58,11 @@
             <template v-else-if="column.key === 'avgPrice'">
               ¥{{ record.avgPrice }}
             </template>
+            <template v-else-if="column.key === 'action'">
+              <a-button type="link" size="small" @click.stop="openDetail(record)">
+                <LineChartOutlined /> 趋势
+              </a-button>
+            </template>
           </template>
         </a-table>
       </a-card>
@@ -77,22 +83,112 @@
         height="380px"
       />
     </a-card>
+
+    <a-drawer
+      v-model:open="detailDrawerOpen"
+      :title="currentEmployee?.empName + ' - 业绩走势'"
+      width="720px"
+      :mask-closable="false"
+      @close="closeDetail"
+    >
+      <div v-if="trendData.employee" class="employee-detail">
+        <div class="emp-info-card">
+          <a-avatar
+            :style="{ backgroundColor: '#E8A0BF' }"
+            size="large"
+          >
+            {{ currentEmployee?.empName?.charAt(0) }}
+          </a-avatar>
+          <div class="emp-info">
+            <div class="emp-name">{{ trendData.employee.empName }}</div>
+            <div class="emp-meta">
+              <span>{{ trendData.employee.position }}</span>
+              <span class="dot">·</span>
+              <span>{{ trendData.employee.serviceType }}</span>
+              <span class="dot">·</span>
+              <span>{{ trendData.employee.storeName }}</span>
+            </div>
+          </div>
+          <div class="emp-months-selector">
+            <span class="selector-label">查看最近</span>
+            <a-select
+              v-model:value="trendMonths"
+              style="width: 90px"
+              size="small"
+              @change="loadTrendData"
+            >
+              <a-select-option :value="3">3 个月</a-select-option>
+              <a-select-option :value="6">6 个月</a-select-option>
+              <a-select-option :value="9">9 个月</a-select-option>
+              <a-select-option :value="12">12 个月</a-select-option>
+            </a-select>
+          </div>
+        </div>
+
+        <div class="summary-stats">
+          <div class="stat-item">
+            <div class="stat-label">累计划卡</div>
+            <div class="stat-value">¥{{ formatNumber(totalCardAmount) }}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">累计客单</div>
+            <div class="stat-value">{{ totalOrderCount }} 单</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">平均客单价</div>
+            <div class="stat-value">¥{{ avgPriceAll.toFixed(0) }}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">业绩趋势</div>
+            <div class="stat-value">
+              <a-tag :color="trendDirectionColor">
+                <component :is="trendDirectionIcon" />
+                {{ trendDirectionText }}
+              </a-tag>
+            </div>
+          </div>
+        </div>
+
+        <a-card title="划卡总额与客单数趋势" class="trend-card">
+          <PlotlyChart
+            :data="trendChartData"
+            :layout="trendChartLayout"
+            height="360px"
+          />
+        </a-card>
+      </div>
+      <a-spin v-else :spinning="loadingTrend" tip="加载中...">
+        <div style="min-height: 200px"></div>
+      </a-spin>
+    </a-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { Avatar } from 'ant-design-vue'
+import {
+  LineChartOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  MinusOutlined,
+} from '@ant-design/icons-vue'
 import PlotlyChart from '@/components/charts/PlotlyChart.vue'
 import { employeeApi } from '@/api/employee'
 import { useFilter } from '@/composables/useFilter'
-import type { EmployeeRanking, EmployeeOrderData } from '@/types'
+import type { EmployeeRanking, EmployeeOrderData, EmployeeTrendResponse, EmployeeTrendItem } from '@/types'
 
 const { filterParams } = useFilter()
 
 const serviceType = ref('all')
 const rankingData = ref<EmployeeRanking[]>([])
 const orderData = ref<EmployeeOrderData[]>([])
+
+const detailDrawerOpen = ref(false)
+const currentEmployee = ref<EmployeeRanking | null>(null)
+const trendMonths = ref(6)
+const loadingTrend = ref(false)
+const trendData = ref<EmployeeTrendResponse>({ employee: null, trend: [] })
 
 const chartColors = [
   '#E8A0BF',
@@ -115,6 +211,12 @@ const rankingColumns = [
   { title: '划卡总额', dataIndex: 'cardAmount', key: 'cardAmount' },
   { title: '客单数', dataIndex: 'orderCount', key: 'orderCount' },
   { title: '客单价', dataIndex: 'avgPrice', key: 'avgPrice' },
+  {
+    title: '操作',
+    key: 'action',
+    width: 100,
+    align: 'center',
+  },
 ]
 
 const barChartData = computed(() => {
@@ -223,6 +325,123 @@ const compareChartLayout = {
   },
 }
 
+const totalCardAmount = computed(() => {
+  return trendData.value.trend.reduce((sum, item) => sum + item.cardAmount, 0)
+})
+
+const totalOrderCount = computed(() => {
+  return trendData.value.trend.reduce((sum, item) => sum + item.orderCount, 0)
+})
+
+const avgPriceAll = computed(() => {
+  return totalOrderCount.value > 0 ? totalCardAmount.value / totalOrderCount.value : 0
+})
+
+const trendDirection = computed(() => {
+  const trend = trendData.value.trend
+  if (trend.length < 2) return 0
+  const first = trend[0].cardAmount
+  const last = trend[trend.length - 1].cardAmount
+  if (first === 0) return 0
+  const change = ((last - first) / Math.abs(first)) * 100
+  return change
+})
+
+const trendDirectionIcon = computed(() => {
+  if (trendDirection.value > 1) return ArrowUpOutlined
+  if (trendDirection.value < -1) return ArrowDownOutlined
+  return MinusOutlined
+})
+
+const trendDirectionColor = computed(() => {
+  if (trendDirection.value > 1) return 'green'
+  if (trendDirection.value < -1) return 'red'
+  return 'default'
+})
+
+const trendDirectionText = computed(() => {
+  if (trendDirection.value > 1) return `上升 ${trendDirection.value.toFixed(1)}%`
+  if (trendDirection.value < -1) return `下降 ${Math.abs(trendDirection.value).toFixed(1)}%`
+  return '持平'
+})
+
+const trendChartData = computed(() => {
+  const data = trendData.value.trend
+  if (data.length === 0) return []
+  return [
+    {
+      x: data.map(d => d.statMonth),
+      y: data.map(d => d.cardAmount),
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: '划卡总额',
+      yaxis: 'y',
+      line: {
+        color: '#E8A0BF',
+        width: 3,
+        shape: 'spline',
+      },
+      marker: {
+        size: 8,
+        color: '#E8A0BF',
+      },
+      hovertemplate: '<b>%{x}</b><br>划卡总额: ¥%{y:,.0f}<extra></extra>',
+    },
+    {
+      x: data.map(d => d.statMonth),
+      y: data.map(d => d.orderCount),
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: '客单数',
+      yaxis: 'y2',
+      line: {
+        color: '#6B5B95',
+        width: 3,
+        shape: 'spline',
+        dash: 'dash',
+      },
+      marker: {
+        size: 8,
+        color: '#6B5B95',
+        symbol: 'diamond',
+      },
+      hovertemplate: '<b>%{x}</b><br>客单数: %{y}<extra></extra>',
+    },
+  ]
+})
+
+const trendChartLayout = computed(() => ({
+  margin: { l: 70, r: 70, t: 20, b: 40 },
+  xaxis: {
+    gridcolor: '#f0f0f0',
+    zeroline: false,
+  },
+  yaxis: {
+    gridcolor: '#f0f0f0',
+    zeroline: false,
+    title: {
+      text: '划卡总额 (元)',
+      font: { size: 12, color: '#E8A0BF' },
+    },
+    tickformat: ',.0f',
+  },
+  yaxis2: {
+    overlaying: 'y',
+    side: 'right',
+    showgrid: false,
+    zeroline: false,
+    title: {
+      text: '客单数',
+      font: { size: 12, color: '#6B5B95' },
+    },
+  },
+  legend: {
+    orientation: 'h',
+    y: -0.15,
+    x: 0,
+  },
+}))
+
 function formatNumber(num: number): string {
   if (num >= 10000) {
     return (num / 10000).toFixed(1) + '万'
@@ -236,6 +455,38 @@ function getAvatarColor(index: number): string {
 
 function handleServiceTypeChange() {
   loadData()
+}
+
+function handleRowClick(record: EmployeeRanking) {
+  return {
+    style: { cursor: 'pointer' },
+  }
+}
+
+function openDetail(record: EmployeeRanking) {
+  currentEmployee.value = record
+  detailDrawerOpen.value = true
+  trendData.value = { employee: null, trend: [] }
+  loadTrendData()
+}
+
+function closeDetail() {
+  detailDrawerOpen.value = false
+  currentEmployee.value = null
+  trendData.value = { employee: null, trend: [] }
+}
+
+async function loadTrendData() {
+  if (!currentEmployee.value) return
+  loadingTrend.value = true
+  try {
+    const data = await employeeApi.getEmployeeTrend(currentEmployee.value.empId, trendMonths.value)
+    trendData.value = data
+  } catch (error) {
+    console.error('加载员工业绩趋势失败:', error)
+  } finally {
+    loadingTrend.value = false
+  }
 }
 
 async function loadData() {
@@ -349,6 +600,90 @@ onMounted(() => {
 @media (max-width: 1024px) {
   .top-section {
     grid-template-columns: 1fr;
+  }
+}
+
+.employee-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.emp-info-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: linear-gradient(135deg, #fef6fa 0%, #f5f0ff 100%);
+  border-radius: 12px;
+}
+
+.emp-info {
+  flex: 1;
+}
+
+.emp-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.emp-meta {
+  font-size: 13px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.emp-meta .dot {
+  color: #ccc;
+}
+
+.emp-months-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selector-label {
+  font-size: 13px;
+  color: #666;
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stat-item {
+  background: #fafafa;
+  padding: 16px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.trend-card {
+  min-height: 420px;
+}
+
+@media (max-width: 768px) {
+  .summary-stats {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>

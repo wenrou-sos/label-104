@@ -104,6 +104,25 @@ export interface EmployeeOrderData {
   avgPrice: number
 }
 
+export interface EmployeeTrendItem {
+  statMonth: string
+  cardAmount: number
+  orderCount: number
+  avgPrice: number
+}
+
+export interface EmployeeTrendResponse {
+  employee: {
+    empId: string
+    empName: string
+    position: string
+    serviceType: string
+    storeId: string
+    storeName: string
+  } | null
+  trend: EmployeeTrendItem[]
+}
+
 export interface Member {
   memberId: string
   storeId: string
