@@ -1,100 +1,125 @@
 import pandas as pd
 import numpy as np
+import hashlib
 from datetime import datetime
 from utils.csv_loader import CsvLoader
 
 
 class MemberService:
+    _SURNAMES = [
+        '王', '李', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴',
+        '徐', '孙', '胡', '朱', '高', '林', '何', '郭', '马', '罗',
+        '梁', '宋', '郑', '谢', '韩', '唐', '冯', '于', '董', '萧',
+        '程', '曹', '袁', '邓', '许', '傅', '沈', '曾', '彭', '吕'
+    ]
+    _GIVEN_CHARS = [
+        '丽', '娜', '敏', '静', '秀英', '霞', '平', '刚', '桂英',
+        '玉兰', '华', '雪', '慧', '琳', '颖', '芳', '洁', '红',
+        '梅', '云', '婷', '艳', '娟', '莉', '玲', '倩', '秋',
+        '欣', '怡', '佳', '乐', '晨', '悦', '妍', '蕾', '薇',
+        '思', '语', '蓉', '菲', '瑶', '梦', '悦', '曦', '萱'
+    ]
+
+    @staticmethod
+    def _generate_member_name(member_id: str) -> str:
+        h = int(hashlib.md5(member_id.encode('utf-8')).hexdigest(), 16)
+        surname = MemberService._SURNAMES[h % len(MemberService._SURNAMES)]
+        given = MemberService._GIVEN_CHARS[(h >> 8) % len(MemberService._GIVEN_CHARS)]
+        return surname + given
+
     @staticmethod
     def _filter_data(df, store_ids=None):
         filtered = df.copy()
-        
         if store_ids and 'store_id' in filtered.columns:
             if isinstance(store_ids, str):
                 store_ids = [s.strip() for s in store_ids.split(',') if s.strip()]
             if store_ids:
                 filtered = filtered[filtered['store_id'].isin(store_ids)]
-        
         return filtered
-    
+
     @staticmethod
-    def _sort_data(df, sort_by=None, sort_order='asc'):
-        if sort_by and sort_by in df.columns:
-            ascending = sort_order.lower() == 'asc'
-            df = df.sort_values(by=sort_by, ascending=ascending)
-        return df.reset_index(drop=True)
-    
-    @staticmethod
-    def get_cycle(store_ids=None, sort_by=None, sort_order='asc'):
+    def get_cycle(store_ids=None, start_date=None, end_date=None):
         stores = CsvLoader.get_stores()
         members = CsvLoader.get_members()
-        
+
         filtered = MemberService._filter_data(members, store_ids)
-        
+
         if filtered.empty:
-            return {'distribution': [], 'stores': []}
-        
+            return {
+                'avg_recharge_cycle': 0,
+                'recharge_rate': 0,
+                'total_members': 0,
+                'active_members': 0,
+                'distribution': [],
+                'stores': [],
+            }
+
+        total_members = int(len(filtered))
+        avg_cycle = float(round(filtered['recharge_cycle_days'].mean(), 1)) if total_members > 0 else 0
+        recharged_count = int(filtered['recharged_in_90d'].sum())
+        recharge_rate = round(recharged_count / total_members, 4) if total_members > 0 else 0
+
+        today = datetime.now()
+        filtered = filtered.copy()
+        filtered['last_visit_date'] = pd.to_datetime(filtered['last_visit_date'])
+        filtered['days_since_visit'] = (today - filtered['last_visit_date']).dt.days
+        active_members = int((filtered['days_since_visit'] <= 60).sum())
+
         cycle_bins = [0, 30, 60, 90, 120, 150, 180, float('inf')]
         cycle_labels = ['0-30天', '31-60天', '61-90天', '91-120天', '121-150天', '151-180天', '180天以上']
-        
         filtered['cycle_group'] = pd.cut(filtered['recharge_cycle_days'], bins=cycle_bins, labels=cycle_labels, right=True)
-        
         distribution = filtered['cycle_group'].value_counts().reindex(cycle_labels, fill_value=0)
-        total = len(filtered)
         dist_list = []
         for label in cycle_labels:
             count = int(distribution[label])
-            ratio = round(count / total, 4) if total > 0 else 0
-            dist_list.append({
-                'label': label,
-                'count': count,
-                'ratio': ratio
-            })
-        
+            ratio = round(count / total_members, 4) if total_members > 0 else 0
+            dist_list.append({'label': label, 'count': count, 'ratio': ratio})
+
         store_cycles = filtered.groupby('store_id').agg({
             'recharge_cycle_days': 'mean',
-            'member_id': 'count'
+            'member_id': 'count',
         }).reset_index()
         store_cycles.columns = ['store_id', 'avg_cycle_days', 'member_count']
         store_cycles = pd.merge(store_cycles, stores[['store_id', 'store_name']], on='store_id', how='left')
         store_cycles['avg_cycle_days'] = store_cycles['avg_cycle_days'].round(1)
-        
-        store_cycles = MemberService._sort_data(store_cycles, sort_by, sort_order)
-        
+
         return {
+            'avg_recharge_cycle': avg_cycle,
+            'recharge_rate': recharge_rate,
+            'total_members': total_members,
+            'active_members': active_members,
             'distribution': dist_list,
-            'stores': store_cycles.to_dict('records')
+            'stores': store_cycles.to_dict('records'),
         }
-    
+
     @staticmethod
-    def get_recharge(store_ids=None, sort_by=None, sort_order='asc'):
+    def get_recharge(store_ids=None, start_date=None, end_date=None):
         stores = CsvLoader.get_stores()
         members = CsvLoader.get_members()
-        
+
         filtered = MemberService._filter_data(members, store_ids)
-        
+
         if filtered.empty:
             return {'overall': {}, 'stores': []}
-        
+
         total_members = len(filtered)
         recharged_count = int(filtered['recharged_in_90d'].sum())
         recharge_rate = round(recharged_count / total_members, 4) if total_members > 0 else 0
-        
         total_recharge = float(filtered['total_recharge'].sum())
         avg_recharge = round(total_recharge / total_members, 2) if total_members > 0 else 0
-        
+
         overall = {
             'total_members': total_members,
             'recharged_count': recharged_count,
             'recharge_rate': recharge_rate,
             'total_recharge': round(total_recharge, 2),
-            'avg_recharge': avg_recharge
+            'avg_recharge': avg_recharge,
         }
-        
+
         store_recharge = filtered.groupby('store_id').agg({
             'member_id': 'count',
             'recharged_in_90d': 'sum',
-            'total_recharge': 'sum'
+            'total_recharge': 'sum',
         }).reset_index()
         store_recharge.columns = ['store_id', 'member_count', 'recharged_count', 'total_recharge']
         store_recharge = pd.merge(store_recharge, stores[['store_id', 'store_name']], on='store_id', how='left')
@@ -102,74 +127,54 @@ class MemberService:
         store_recharge['avg_recharge'] = (store_recharge['total_recharge'] / store_recharge['member_count']).round(2)
         store_recharge['total_recharge'] = store_recharge['total_recharge'].round(2)
         store_recharge['recharged_count'] = store_recharge['recharged_count'].astype(int)
-        
-        store_recharge = MemberService._sort_data(store_recharge, sort_by, sort_order)
-        
-        return {
-            'overall': overall,
-            'stores': store_recharge.to_dict('records')
-        }
-    
+
+        return {'overall': overall, 'stores': store_recharge.to_dict('records')}
+
     @staticmethod
-    def get_churn(store_ids=None, sort_by=None, sort_order='desc'):
+    def get_churn(store_ids=None, start_date=None, end_date=None, days=60, limit=200):
         stores = CsvLoader.get_stores()
         members = CsvLoader.get_members()
-        
+
         filtered = MemberService._filter_data(members, store_ids)
-        
+
         if filtered.empty:
-            return {'levels': [], 'stores': []}
-        
+            return []
+
         today = datetime.now()
+        filtered = filtered.copy()
         filtered['last_visit_date'] = pd.to_datetime(filtered['last_visit_date'])
         filtered['days_since_visit'] = (today - filtered['last_visit_date']).dt.days
-        
+
+        churned = filtered[filtered['days_since_visit'] >= days].copy()
+
         def get_churn_level(days):
-            if days <= 30:
-                return 'active'
-            elif days <= 60:
-                return 'warning'
-            elif days <= 90:
-                return 'risk'
+            if days >= 120:
+                return 'high'
+            elif days >= 90:
+                return 'medium'
             else:
-                return 'churned'
-        
-        filtered['churn_level'] = filtered['days_since_visit'].apply(get_churn_level)
-        
-        level_order = ['active', 'warning', 'risk', 'churned']
-        level_names = {'active': '活跃', 'warning': '预警', 'risk': '风险', 'churned': '流失'}
-        
-        level_counts = filtered['churn_level'].value_counts().reindex(level_order, fill_value=0)
-        total = len(filtered)
-        levels_list = []
-        for level in level_order:
-            count = int(level_counts[level])
-            ratio = round(count / total, 4) if total > 0 else 0
-            levels_list.append({
-                'level': level,
-                'name': level_names[level],
-                'count': count,
-                'ratio': ratio
+                return 'low'
+
+        churned['level'] = churned['days_since_visit'].apply(get_churn_level)
+        churned = pd.merge(churned, stores[['store_id', 'store_name']], on='store_id', how='left')
+
+        churned['member_name'] = churned['member_id'].apply(MemberService._generate_member_name)
+
+        churned = churned.sort_values(by='days_since_visit', ascending=False)
+        if limit and limit > 0:
+            churned = churned.head(limit)
+
+        result = []
+        for _, row in churned.iterrows():
+            result.append({
+                'member_id': str(row['member_id']),
+                'member_name': str(row['member_name']),
+                'store_name': str(row['store_name']),
+                'last_visit_date': row['last_visit_date'].strftime('%Y-%m-%d') if pd.notna(row['last_visit_date']) else '',
+                'days_since_last_visit': int(row['days_since_visit']),
+                'total_recharge': round(float(row['total_recharge']), 2),
+                'total_visits': int(row['total_visits']),
+                'level': str(row['level']),
             })
-        
-        store_churn = filtered.groupby('store_id').apply(lambda x: pd.Series({
-            'total_members': len(x),
-            'active_count': (x['churn_level'] == 'active').sum(),
-            'warning_count': (x['churn_level'] == 'warning').sum(),
-            'risk_count': (x['churn_level'] == 'risk').sum(),
-            'churned_count': (x['churn_level'] == 'churned').sum(),
-            'churn_rate': (x['churn_level'] == 'churned').sum() / len(x) if len(x) > 0 else 0
-        })).reset_index()
-        
-        store_churn = pd.merge(store_churn, stores[['store_id', 'store_name']], on='store_id', how='left')
-        store_churn['churn_rate'] = store_churn['churn_rate'].round(4)
-        
-        for col in ['active_count', 'warning_count', 'risk_count', 'churned_count']:
-            store_churn[col] = store_churn[col].astype(int)
-        
-        store_churn = MemberService._sort_data(store_churn, sort_by, sort_order)
-        
-        return {
-            'levels': levels_list,
-            'stores': store_churn.to_dict('records')
-        }
+
+        return result
