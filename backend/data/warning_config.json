@@ -1,0 +1,6 @@
+{
+  "storeRevenueDropThreshold": 5,
+  "memberChurnDaysThreshold": 45,
+  "memberChurnHighRiskDays": 100,
+  "memberChurnMediumRiskDays": 75
+}

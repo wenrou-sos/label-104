@@ -45,12 +45,27 @@
 
     <div v-if="!compareMode" class="kpi-cards">
       <a-card class="kpi-card gradient-1">
+        <template #title>
+          <div class="kpi-card-title">
+            <span>月度营收</span>
+            <a-badge
+              v-if="hasRevenueWarning"
+              :count="'预警'"
+              :number-style="{ backgroundColor: '#ff4d4f' }"
+              class="warning-badge"
+            >
+              <span></span>
+            </a-badge>
+          </div>
+        </template>
         <div class="kpi-content">
           <div class="kpi-icon"><DollarOutlined /></div>
           <div class="kpi-info">
-            <div class="kpi-label">月度营收</div>
             <div class="kpi-value">¥{{ formatNumber(totalRevenue) }}</div>
-            <div class="kpi-trend up"><ArrowUpOutlined /> 12.5%</div>
+            <div :class="['kpi-trend', overallRevenueChange >= 0 ? 'up' : 'down']">
+              <component :is="overallRevenueChange >= 0 ? ArrowUpOutlined : ArrowDownOutlined" />
+              {{ overallRevenueChange >= 0 ? '+' : '' }}{{ overallRevenueChange.toFixed(1) }}%
+            </div>
           </div>
         </div>
       </a-card>
@@ -119,6 +134,13 @@
                 :style="{ backgroundColor: getStoreColor(store.storeId, idx) }"
               ></span>
               <span class="store-name">{{ store.storeName }}</span>
+              <a-tag
+                v-if="kpi.key === 'revenue' && store.revenueWarning"
+                color="red"
+                style="margin-left: 6px; padding: 0 4px; font-size: 11px; line-height: 16px"
+              >
+                预警
+              </a-tag>
             </div>
             <div class="store-right">
               <span class="store-value">{{ kpi.formatter(Number(store[kpi.key]) || 0) }}</span>
@@ -177,6 +199,11 @@
                   color="purple"
                   style="margin-right: 6px"
                 >对比</a-tag>
+                <a-tag
+                  v-if="record.revenueWarning"
+                  color="red"
+                  style="margin-right: 6px"
+                >预警</a-tag>
                 {{ record.storeName }}
               </span>
             </template>
@@ -356,6 +383,20 @@ const avgRepeatRate = computed(() => {
     metricsData.value.reduce((sum, item) => sum + item.repeatRate, 0) /
     metricsData.value.length
   )
+})
+
+const hasRevenueWarning = computed(() => {
+  return metricsData.value.some(m => m.revenueWarning === true)
+})
+
+const overallRevenueChange = computed(() => {
+  const valid = metricsData.value.filter(m => typeof m.revenueChange === 'number')
+  if (valid.length === 0) return 0
+  return valid.reduce((sum, m) => sum + (m.revenueChange as number), 0) / valid.length
+})
+
+const warningStores = computed(() => {
+  return metricsData.value.filter(m => m.revenueWarning === true).map(m => m.storeName)
 })
 
 const sortedRankingData = computed(() => {
@@ -559,6 +600,25 @@ onMounted(() => loadData())
   overflow: hidden;
 }
 .kpi-card :deep(.ant-card-body) { padding: 20px !important; }
+.kpi-card :deep(.ant-card-head) {
+  background: transparent !important;
+  border-bottom: none !important;
+  padding: 12px 20px 0 20px !important;
+  min-height: auto !important;
+}
+.kpi-card :deep(.ant-card-head-title) { padding: 0 !important; }
+.kpi-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+.warning-badge :deep(.ant-scroll-number) {
+  padding: 0 8px !important;
+  border-radius: 10px !important;
+}
 
 .gradient-1 { background: linear-gradient(135deg, #FCE7F3 0%, #FBCFE8 100%); }
 .gradient-2 { background: linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%); }

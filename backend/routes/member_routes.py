@@ -29,7 +29,7 @@ def get_recharge():
 @member_bp.route('/churn', methods=['GET'])
 def get_churn():
     params = _get_query_params()
-    days = request.args.get('days', type=int, default=60)
+    days = request.args.get('days', type=int, default=None)
     limit = request.args.get('limit', type=int, default=200)
     data = MemberService.get_churn(**params, days=days, limit=limit)
     return jsonify({'code': 200, 'message': 'success', 'data': data})

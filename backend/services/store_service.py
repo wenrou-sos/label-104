@@ -1,5 +1,6 @@
 import pandas as pd
 from utils.csv_loader import CsvLoader
+from services.warning_service import WarningService
 
 
 class StoreService:
@@ -18,6 +19,47 @@ class StoreService:
                 filtered = filtered[filtered['store_id'].isin(store_ids)]
         
         return filtered
+
+    @staticmethod
+    def _calculate_revenue_change(all_metrics, store_id, current_start, current_end):
+        try:
+            store_data = all_metrics[all_metrics['store_id'] == store_id].copy()
+            if store_data.empty:
+                return None, False
+
+            store_data = store_data.sort_values('stat_month')
+            months = sorted(store_data['stat_month'].unique().tolist())
+            if len(months) < 2:
+                return None, False
+
+            current_months = [m for m in months if (not current_start or m >= current_start) and (not current_end or m <= current_end)]
+            if not current_months:
+                current_months = months[-1:]
+
+            current_revenue = store_data[store_data['stat_month'].isin(current_months)]['revenue'].sum()
+
+            current_month_idx = months.index(current_months[-1]) if current_months[-1] in months else len(months) - 1
+            prev_month_idx = current_month_idx - len(current_months)
+            if prev_month_idx < 0:
+                return None, False
+
+            prev_months = months[max(0, prev_month_idx - len(current_months) + 1):prev_month_idx + 1]
+            if not prev_months:
+                return None, False
+
+            prev_revenue = store_data[store_data['stat_month'].isin(prev_months)]['revenue'].sum()
+
+            if prev_revenue == 0:
+                change_pct = 0.0 if current_revenue == 0 else float('inf') if current_revenue > 0 else float('-inf')
+            else:
+                change_pct = round(((current_revenue - prev_revenue) / abs(prev_revenue)) * 100, 2)
+
+            threshold = WarningService.get_store_revenue_drop_threshold()
+            is_warning = change_pct <= -threshold
+
+            return change_pct, is_warning
+        except Exception:
+            return None, False
     
     @staticmethod
     def _sort_data(df, sort_by=None, sort_order='asc'):
@@ -30,6 +72,7 @@ class StoreService:
     def get_metrics(start_date=None, end_date=None, store_ids=None, sort_by=None, sort_order='asc'):
         stores = CsvLoader.get_stores()
         metrics = CsvLoader.get_store_metrics()
+        all_metrics = metrics.copy()
         
         filtered = StoreService._filter_data(metrics, start_date, end_date, store_ids)
         
@@ -53,7 +96,15 @@ class StoreService:
         
         result = StoreService._sort_data(result, sort_by, sort_order)
         
-        return result.to_dict('records')
+        records = result.to_dict('records')
+        for rec in records:
+            change_pct, is_warning = StoreService._calculate_revenue_change(
+                all_metrics, rec['store_id'], start_date, end_date
+            )
+            rec['revenueChange'] = float(change_pct) if change_pct is not None else None
+            rec['revenueWarning'] = bool(is_warning) if is_warning is not None else False
+        
+        return records
     
     @staticmethod
     def get_ranking(start_date=None, end_date=None, store_ids=None, sort_by='revenue', sort_order='desc'):

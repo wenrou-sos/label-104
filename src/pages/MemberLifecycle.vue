@@ -73,7 +73,12 @@
 
       <a-card title="流失预警名单" class="churn-card">
         <template #extra>
-          <a-tag color="red">共 {{ churnTotal }} 人</a-tag>
+          <div class="churn-card-extra">
+            <a-tag color="red">共 {{ churnTotal }} 人</a-tag>
+            <a-button type="link" size="small" @click="openWarningConfig">
+              <SettingOutlined /> 预警配置
+            </a-button>
+          </div>
         </template>
         <a-table
           :columns="churnColumns"
@@ -98,7 +103,7 @@
             </template>
             <template v-else-if="column.key === 'daysSinceLastVisit'">
               <span class="days-text">
-                <WarningOutlined v-if="record.daysSinceLastVisit >= 60" class="warning-icon" />
+                <WarningOutlined v-if="record.daysSinceLastVisit >= warningConfig.memberChurnDaysThreshold" class="warning-icon" />
                 {{ record.daysSinceLastVisit }} 天
               </span>
             </template>
@@ -113,12 +118,82 @@
           </template>
         </a-table>
       </a-card>
+
+      <a-drawer
+        v-model:open="configDrawerOpen"
+        title="预警阈值配置"
+        width="420"
+        :mask-closable="false"
+      >
+        <a-form
+          :model="warningConfigForm"
+          :label-col="{ span: 10 }"
+          :wrapper-col="{ span: 14 }"
+          layout="horizontal"
+        >
+          <a-divider orientation="left">门店营收预警</a-divider>
+          <a-form-item label="营收环比下降阈值">
+            <a-input-number
+              v-model:value="warningConfigForm.storeRevenueDropThreshold"
+              :min="1"
+              :max="100"
+              :step="0.5"
+              style="width: 100%"
+              addon-after="%"
+            />
+            <div class="form-tip">当门店营收环比下降超过此值时，显示红色预警徽标</div>
+          </a-form-item>
+
+          <a-divider orientation="left">会员流失预警</a-divider>
+          <a-form-item label="流失判定天数">
+            <a-input-number
+              v-model:value="warningConfigForm.memberChurnDaysThreshold"
+              :min="7"
+              :max="365"
+              :step="1"
+              style="width: 100%"
+              addon-after="天"
+            />
+            <div class="form-tip">会员连续未到店超过此天数，判定为流失预警</div>
+          </a-form-item>
+          <a-form-item label="中风险天数">
+            <a-input-number
+              v-model:value="warningConfigForm.memberChurnMediumRiskDays"
+              :min="7"
+              :max="365"
+              :step="1"
+              style="width: 100%"
+              addon-after="天"
+            />
+            <div class="form-tip">达到此天数标记为中风险流失</div>
+          </a-form-item>
+          <a-form-item label="高风险天数">
+            <a-input-number
+              v-model:value="warningConfigForm.memberChurnHighRiskDays"
+              :min="7"
+              :max="365"
+              :step="1"
+              style="width: 100%"
+              addon-after="天"
+            />
+            <div class="form-tip">达到此天数标记为高风险流失</div>
+          </a-form-item>
+        </a-form>
+        <template #footer>
+          <div class="drawer-footer">
+            <a-button @click="configDrawerOpen = false">取消</a-button>
+            <a-button type="primary" :loading="savingConfig" @click="saveWarningConfig">
+              保存配置
+            </a-button>
+          </div>
+        </template>
+      </a-drawer>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, reactive } from 'vue'
 import {
   CalendarOutlined,
   ReloadOutlined,
@@ -128,11 +203,14 @@ import {
   ArrowDownOutlined,
   WarningOutlined,
   PhoneOutlined,
+  SettingOutlined,
 } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
 import PlotlyChart from '@/components/charts/PlotlyChart.vue'
 import { memberApi } from '@/api/member'
+import { warningApi } from '@/api/warning'
 import { useFilter } from '@/composables/useFilter'
-import type { MemberCycleStats, ChurnMember, ChurnResponse } from '@/types'
+import type { MemberCycleStats, ChurnMember, ChurnResponse, WarningConfig } from '@/types'
 
 const { filterParams } = useFilter()
 
@@ -145,6 +223,17 @@ const cycleStats = ref<MemberCycleStats>({
 })
 const churnMembers = ref<ChurnMember[]>([])
 const churnTotal = ref(0)
+
+const warningConfig = ref<WarningConfig>({
+  storeRevenueDropThreshold: 10.0,
+  memberChurnDaysThreshold: 60,
+  memberChurnHighRiskDays: 120,
+  memberChurnMediumRiskDays: 90,
+})
+
+const configDrawerOpen = ref(false)
+const savingConfig = ref(false)
+const warningConfigForm = reactive<WarningConfig>({ ...warningConfig.value })
 
 const churnColumns = [
   { title: '会员姓名', key: 'memberName', dataIndex: 'memberName' },
@@ -227,15 +316,41 @@ function getLevelText(level: string): string {
 
 async function loadData() {
   try {
-    const [cycle, churnResp] = await Promise.all([
+    const [cycle, churnResp, config] = await Promise.all([
       memberApi.getMemberCycle(filterParams.value),
       memberApi.getChurnMembers(filterParams.value),
+      warningApi.getWarningConfig(),
     ])
     cycleStats.value = cycle
     churnTotal.value = churnResp.total
     churnMembers.value = churnResp.list
+    warningConfig.value = config
+    Object.assign(warningConfigForm, config)
   } catch (error) {
     console.error('加载数据失败:', error)
+  }
+}
+
+function openWarningConfig() {
+  Object.assign(warningConfigForm, warningConfig.value)
+  configDrawerOpen.value = true
+}
+
+async function saveWarningConfig() {
+  savingConfig.value = true
+  try {
+    const config = await warningApi.saveWarningConfig(warningConfigForm)
+    warningConfig.value = config
+    message.success('预警配置保存成功')
+    configDrawerOpen.value = false
+    const churnResp = await memberApi.getChurnMembers(filterParams.value)
+    churnTotal.value = churnResp.total
+    churnMembers.value = churnResp.list
+  } catch (error) {
+    console.error('保存配置失败:', error)
+    message.error('保存配置失败')
+  } finally {
+    savingConfig.value = false
   }
 }
 
@@ -367,6 +482,25 @@ onMounted(() => {
 
 .warning-icon {
   font-size: 16px;
+}
+
+.churn-card-extra {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 @media (max-width: 1200px) {

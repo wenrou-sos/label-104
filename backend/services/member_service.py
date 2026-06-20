@@ -3,6 +3,7 @@ import numpy as np
 import hashlib
 from datetime import datetime
 from utils.csv_loader import CsvLoader
+from services.warning_service import WarningService
 
 
 class MemberService:
@@ -91,11 +92,12 @@ class MemberService:
         recharged_count = int(filtered['recharged_in_90d'].sum())
         recharge_rate = round(recharged_count / total_members, 4) if total_members > 0 else 0
 
+        churn_threshold = WarningService.get_member_churn_days_threshold()
         today = datetime.now()
         filtered = filtered.copy()
         filtered['last_visit_date_dt'] = pd.to_datetime(filtered['last_visit_date'])
         filtered['days_since_visit'] = (today - filtered['last_visit_date_dt']).dt.days
-        active_members = int((filtered['days_since_visit'] <= 60).sum())
+        active_members = int((filtered['days_since_visit'] < churn_threshold).sum())
 
         cycle_bins = [0, 30, 60, 90, 120, 150, 180, float('inf')]
         cycle_labels = ['0-30天', '31-60天', '61-90天', '91-120天', '121-150天', '151-180天', '180天以上']
@@ -164,7 +166,7 @@ class MemberService:
         return {'overall': overall, 'stores': store_recharge.to_dict('records')}
 
     @staticmethod
-    def get_churn(store_ids=None, start_date=None, end_date=None, days=60, limit=200):
+    def get_churn(store_ids=None, start_date=None, end_date=None, days=None, limit=200):
         stores = CsvLoader.get_stores()
         members = CsvLoader.get_members()
 
@@ -172,6 +174,11 @@ class MemberService:
 
         if filtered.empty:
             return {'total': 0, 'list': []}
+
+        if days is None:
+            days = WarningService.get_member_churn_days_threshold()
+
+        churn_levels = WarningService.get_member_churn_levels()
 
         today = datetime.now()
         filtered = filtered.copy()
@@ -181,9 +188,9 @@ class MemberService:
         churned = filtered[filtered['days_since_visit'] >= days].copy()
 
         def get_churn_level(d):
-            if d >= 120:
+            if d >= churn_levels['high']:
                 return 'high'
-            elif d >= 90:
+            elif d >= churn_levels['medium']:
                 return 'medium'
             else:
                 return 'low'

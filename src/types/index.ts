@@ -21,6 +21,8 @@ export interface StoreMetric {
   visitFrequency: number
   newCustomers: number
   repeatRate: number
+  revenueChange?: number | null
+  revenueWarning?: boolean
 }
 
 export interface StoreTrendData {
@@ -177,6 +179,13 @@ export interface FilterOptions {
   startDate: string
   endDate: string
   storeIds: string[]
+}
+
+export interface WarningConfig {
+  storeRevenueDropThreshold: number
+  memberChurnDaysThreshold: number
+  memberChurnHighRiskDays: number
+  memberChurnMediumRiskDays: number
 }
 
 export type ServiceType = 'all' | 'beauty' | 'nail' | 'spa' | 'hair'
